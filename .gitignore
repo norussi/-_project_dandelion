@@ -1,0 +1,25 @@
+# Godot 4 editor cache and imported assets
+.godot/
+
+# Godot export output and credentials
+/export/
+/build/
+export_credentials.cfg
+*.translation
+
+# Godot 3 leftovers / Android build template
+.import/
+android/
+
+# .NET (if a C# version is ever added)
+.mono/
+data_*/
+mono_crash.*.json
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.vscode/
+.idea/

@@ -8,6 +8,10 @@ Godot 4.3 이상을 대상으로 작성한 체험형 교육 게임입니다. 메
 
 ## 실행
 
+**실행 파일로 바로 실행**: `build/windows/Dandelion.exe`(또는 GitHub Releases에서 받은 파일)를 더블클릭합니다. Godot가 필요 없습니다. 게임 데이터가 실행 파일 하나에 들어 있습니다.
+
+**Godot에서 열기**
+
 1. ZIP 압축을 풉니다.
 2. Godot 4 프로젝트 관리자에서 **가져오기 / Import** → `Dandelion/project.godot`.
 3. **F5**로 실행 → 메인 메뉴 → **플레이** → **시각장애 보행** `시작하기` → `전화기를 넣고, 출발한다`.
@@ -114,6 +118,7 @@ Godot 4.3 이상을 대상으로 작성한 체험형 교육 게임입니다. 메
 ```
 Dandelion/
 ├── project.godot              시작 씬: menu/main_menu.tscn, 자동 로드: Settings, Game
+├── export_presets.cfg         실행 파일 내보내기 설정 (Windows Desktop, Linux → ../build/)
 ├── core/
 │   ├── settings.gd            설정·키 설정 저장과 적용 (자동 로드 Settings)
 │   ├── game.gd                체험 목록(STAGES)과 화면 전환 (자동 로드 Game)

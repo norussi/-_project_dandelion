@@ -5,7 +5,7 @@ extends Node
 
 const MAIN_MENU := "res://menu/main_menu.tscn"
 const GITHUB_URL := "https://github.com/norussi/-_project_dandelion"
-const VERSION := "0.2.0"
+const VERSION := "0.2.1"
 
 const STAGES := [
 	{

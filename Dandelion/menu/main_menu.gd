@@ -84,9 +84,9 @@ func _build_ui() -> void:
 	gap.custom_minimum_size.y = 26
 	col.add_child(gap)
 
-	play_button = _menu_button(col, "플레이", _on_play, true)
-	_menu_button(col, "설정", _on_settings, true)
-	_menu_button(col, "종료", func(): get_tree().quit(), false)
+	play_button = _menu_button(col, "플레이", _on_play)
+	_menu_button(col, "설정", _on_settings)
+	_menu_button(col, "종료", func(): get_tree().quit())
 
 	# ---- 오른쪽 아래: GitHub 바로가기
 	github_button = Button.new()
@@ -113,7 +113,7 @@ func _build_ui() -> void:
 
 	# ---- 왼쪽 아래: 버전
 	var ver := Label.new()
-	ver.text = "v%s  ·  Team 2" % Game.VERSION
+	ver.text = "v%s" % Game.VERSION
 	ver.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	ver.offset_left = 28
@@ -130,17 +130,14 @@ func _build_ui() -> void:
 	ui_layer.add_child(mode_select)
 
 
-func _menu_button(parent: Control, text: String, cb: Callable, primary: bool) -> Button:
+# 메인 메뉴 버튼은 모두 같은 글꼴(굵게)과 크기를 쓴다
+func _menu_button(parent: Control, text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(300, 58 if primary else 44)
+	b.custom_minimum_size = Vector2(300, 58)
 	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	if primary:
-		b.add_theme_font_override("font", UiTheme.bold_font())
-		b.add_theme_font_size_override("font_size", Settings.font_size(22))
-	else:
-		b.add_theme_font_size_override("font_size", Settings.font_size(16))
-		b.modulate = Color(1, 1, 1, 0.85)
+	b.add_theme_font_override("font", UiTheme.bold_font())
+	b.add_theme_font_size_override("font_size", Settings.font_size(22))
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b

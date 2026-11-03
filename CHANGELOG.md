@@ -2,6 +2,12 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르고, 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.2.1] - 2026-11-03
+
+### 변경
+- 메인 메뉴의 플레이·설정·종료 버튼을 모두 같은 글꼴(굵게)과 크기로 통일
+- 메인 메뉴 왼쪽 아래 버전 표시를 `v0.2.1`로 바꾸고 ‘Team 2’ 글자 삭제
+
 ## [0.2.0] - 2026-11-03
 
 ### 추가
@@ -41,5 +47,6 @@
 ### 변경
 - 프로젝트 이름을 임시 이름 `Echo Road(잔향)`에서 `민들레(Dandelion)`로 변경
 
+[0.2.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.2.1
 [0.2.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.2.0
 [0.1.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.1.0

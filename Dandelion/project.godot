@@ -1,27 +1,18 @@
-; Engine configuration file.
-; It's best edited using the editor UI and not directly,
-; since the parameters that go here are not all obvious.
-;
-; Format:
-;   [section] ; section goes between []
-;   param=value ; assign values to parameters
-
+; Open with Godot 4.3+ (Compatibility renderer).
 config_version=5
-
-[animation]
-
-compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
 config/name="민들레 — Dandelion"
-config/description="검은 골목, 지팡이의 울림, 그리고 기다리는 목소리."
-run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.7", "GL Compatibility")
+config/description="경험해 보지 못한 상황을, 게임으로 체험하다."
+config/version="0.2.0"
+run/main_scene="res://menu/main_menu.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
 
-[audio]
+[autoload]
 
-general/text_to_speech=true
+Settings="*res://core/settings.gd"
+Game="*res://core/game.gd"
 
 [display]
 
@@ -36,3 +27,8 @@ window/stretch/mode="canvas_items"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)
+textures/default_filters/use_nearest_mipmap_filter=false
+
+[audio]
+
+general/text_to_speech=true

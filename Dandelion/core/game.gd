@@ -5,14 +5,14 @@ extends Node
 
 const MAIN_MENU := "res://menu/main_menu.tscn"
 const GITHUB_URL := "https://github.com/norussi/-_project_dandelion"
-const VERSION := "0.2.1"
+const VERSION := "0.3.0"
 
 const STAGES := [
 	{
 		"id": "visual_walk",
 		"title": "시각장애 보행",
 		"subtitle": "흰 지팡이로 병원 503호까지",
-		"description": "밤 11시 47분, 병원에서 걸려 온 전화. 흰 지팡이와 소리에 의지해 공사 중인 골목과 큰길 횡단보도를 지나, 엘리베이터를 타고 503호까지 걸어갑니다.",
+		"description": "밤 11시 47분, 병원에서 걸려 온 전화. 집 앞 복도에서 지팡이 연습을 마치고, 흰 지팡이와 소리에 의지해 공사 중인 골목과 큰길 횡단보도를 지나 엘리베이터를 타고 503호까지 걸어갑니다.",
 		"tags": ["1인칭 3D", "헤드폰 권장"],
 		"scene": "res://stages/visual_walk/visual_walk.tscn",
 		"preview": "cane",

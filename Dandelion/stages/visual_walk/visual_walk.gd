@@ -27,6 +27,23 @@ const OBSTACLE_TOUCH := 0.65
 const HEAD_TOUCH := 0.75
 const PULSES := 6
 
+# v0.3.0: 걸음에 맞춘 자동 좌우 짚기 (v0.1.0의 이점 촉타법)
+const SWEEP_ANGLE := 0.47       # 좌우 호 반각 (rad). 끝이 좌우 약 ±0.33m
+const TIP_LIFT := 0.035         # 호 가운데에서 지팡이 끝이 뜨는 높이
+const ECHO_WALK := 1.6          # 걸으며 가볍게 짚은 소리의 반향 거리
+# 웅크리기
+const STAND_HEIGHT := 1.7
+const CROUCH_HEIGHT := 1.15
+const STAND_EYE := 1.6
+const CROUCH_EYE := 1.0
+const CROUCH_SPEED := 0.55
+# 연습(튜토리얼) 구간: 아파트 1층 복도 (x = -60에 따로 있음)
+const TUT_X := -60.0
+const TUT_BEAM_Z := -9.5
+const MAIN_START := Vector3(0, 0.05, 3)
+# 도와주는 사람: 병원 밖에서 이 시간 동안 점자블록을 못 찾으면 다가온다
+const HELP_DELAY := 60.0
+
 const NOISE_POS := Vector3(6.4, 0.5, -29.5)
 const UP_X := 60.0              # 2~5층 공용 공간이 놓인 x 오프셋 (엘리베이터로 순간 이동)
 const ROAD_Z0 := -47.0
@@ -134,6 +151,34 @@ var tts_voice := ""
 var settings_button: Button
 var menu_button: Button
 var settings_open := false
+var skip_button: Button
+var fade: ColorRect
+
+# 자동 좌우 짚기
+var step_phase := 0.0
+var sweep := 1.0
+var sweep_over_paving := false
+var sweep_contact := false
+var sweep_contact_label := ""
+var sweep_refresh := 0.0
+# 웅크리기
+var crouching := false
+var crouch_t := 0.0
+var player_shape: CapsuleShape3D
+var player_collider: CollisionShape3D
+# 연습 구간
+var tutorial_active := false
+var tut_step := 0
+var tut_walked := 0.0
+var tut_touched_paving := false
+var tut_ducked := false
+var tut_door_nodes: Array[Node] = []
+var tut_exit_open := false
+# 도와주는 사람
+var no_paving_time := 0.0
+var last_paving_pos := Vector3(0, 0.05, 3.2)
+var helping := false
+var count_help := 0
 
 # 신호등과 차량
 var ped_green := false
@@ -297,6 +342,8 @@ func _build_world() -> void:
 	_room_door(Vector3(UP_X-1.97,1.05,-70.0), true, 1, Vector3(UP_X-1.95,1.45,-69.2))
 	_room_door(Vector3(UP_X+1.97,1.05,-66.0), true, 2, Vector3(UP_X+1.95,1.45,-65.2))
 	_room_door(Vector3(UP_X,1.05,-59.03), false, 3, Vector3(UP_X+0.85,1.45,-59.05))
+
+	_build_tutorial()
 
 	# --- 점자블록
 	var path: Array[Vector2] = [Vector2(0,4.5), Vector2(0,-7), Vector2(4.6,-7), Vector2(4.6,-18.5), Vector2(-5.2,-18.5), Vector2(-5.2,-31.5), Vector2(4.6,-31.5), Vector2(4.6,-44.5), Vector2(0,-44.5), Vector2(0,-46.35)]
@@ -558,10 +605,12 @@ func _build_player() -> void:
 	var collider := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.28
-	capsule.height = 1.7
+	capsule.height = STAND_HEIGHT
 	collider.shape = capsule
-	collider.position.y = 0.85
+	collider.position.y = STAND_HEIGHT * 0.5
 	player.add_child(collider)
+	player_shape = capsule
+	player_collider = collider
 	add_child(player)
 	camera = Camera3D.new()
 	camera.position.y = 1.6
@@ -604,6 +653,11 @@ func _build_ui() -> void:
 	flash.color = Color(1,1,1,0)
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(flash)
+	fade = ColorRect.new()
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade.color = Color(0, 0, 0, 0)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(fade)
 	status = Label.new()
 	status.position = Vector2(28,22)
 	status.add_theme_color_override("font_color", Color(0.45,0.45,0.45))
@@ -675,6 +729,11 @@ func _build_ui() -> void:
 	action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action.pressed.connect(_on_action)
 	buttons.add_child(action)
+	skip_button = Button.new()
+	skip_button.text = "연습 건너뛰기"
+	skip_button.custom_minimum_size = Vector2(140, 48)
+	skip_button.pressed.connect(_on_skip)
+	buttons.add_child(skip_button)
 	settings_button = Button.new()
 	settings_button.text = "설정"
 	settings_button.custom_minimum_size = Vector2(110, 48)
@@ -690,19 +749,22 @@ func _show_intro() -> void:
 	title.text = "민들레  /  DANDELION"
 	body.text = ("밤 11시 47분, 병원에서 전화가 왔다.\n“아버님이 깨어나셨어요. 5층 503호에서 계속 찾고 계십니다.”\n\n"
 		+ "익숙했던 골목은 공사로 길이 바뀌었다. 큰길의 횡단보도도 건너야 한다.\n흰 지팡이 하나로 병원 503호까지 가야 한다.\n\n"
-		+ "· %s: 바라보는 곳을 지팡이로 짚는다. 지팡이 길이(1.2m)가 닿는 곳까지만.\n" % _k("cane_tap")
+		+ "· 걸으면 지팡이가 걸음에 맞춰 좌우를 번갈아 짚는다. %s로 바라보는 곳을 직접 짚어 확인할 수도 있다.\n" % _k("cane_tap")
 		+ "· 알 수 있는 것은 지팡이 끝이 닿은 곳과, 가까운 벽에서 돌아오는 희미한 울림뿐.\n"
-		+ "· 짚지 않고 걸으면 몸으로 부딪혀서야 알게 된다. 허리 위 물체는 지팡이로도 알 수 없다.\n\n"
+		+ "· 허리 위 물체는 지팡이로 알 수 없다. 머리 높이에 무언가 있으면 %s를 누른 채 몸을 낮추자.\n\n" % _k("crouch")
 		+ _controls_line() + "\n\n"
+		+ "처음이라면 집 앞 복도에서 짧은 연습부터 시작하자. (약 2분)\n"
 		+ "헤드폰 권장. 실제 감각의 재현이 아닌 허구적 시각화입니다.")
-	action.text = "전화기를 넣고, 출발한다"
+	action.text = "연습부터 시작하기"
+	skip_button.text = "바로 출발"
+	skip_button.visible = true
 	settings_button.visible = true
 	menu_button.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 func _controls_line() -> String:
-	return ("%s/%s 걷기 · %s/%s 옆걸음 · 마우스 몸 돌리기/숙이기 · %s 서두르기\n" % [_k("forward"), _k("back"), _k("left"), _k("right"), _k("sprint")]
+	return ("%s/%s 걷기 · %s/%s 옆걸음 · 마우스 몸 돌리기/숙이기 · %s 서두르기 · %s 웅크리기\n" % [_k("forward"), _k("back"), _k("left"), _k("right"), _k("sprint"), _k("crouch")]
 		+ "%s 짚기 · %s 발 앞 짚기 · %s 손으로 더듬기 · %s 휴대폰 안내 · %s 일시정지" % [_k("cane_tap"), _k("tap"), _k("interact"), _k("phone"), _k("pause_game")])
 
 
@@ -710,16 +772,19 @@ func _show_pause_text() -> void:
 	title.text = "잠시, 숨을 고른다"
 	body.text = (_controls_line() + "\n"
 		+ "%s: 바라보는 곳 짚기 (손에서 1.2m 이내) · %s: 발 앞 짚기\n" % [_k("cane_tap"), _k("tap")]
+		+ "%s: 누르고 있는 동안 몸을 낮춘다 (머리 높이 돌출물 피하기)\n" % _k("crouch")
 		+ "%s: 손으로 더듬기 (신호기 버튼, 엘리베이터 버튼, 문 옆 명패)\n" % _k("interact")
 		+ "%s: 휴대폰 음성 안내 (골목에서는 오차가 크다)\n\n" % _k("phone")
-		+ "· 걸을 때는 좌우를 번갈아 짚어 발 앞을 확인하자.\n"
+		+ "· 걸으면 지팡이가 걸음에 맞춰 좌우를 번갈아 짚는다. (설정에서 끌 수 있다)\n"
 		+ "· 점자블록의 줄무늬를 따라가면 길이 이어진다. 끊기거나 막힌 곳도 있다.\n"
+		+ "· 점자블록을 오래 찾지 못하면 지나가던 사람이 도움을 청해 온다.\n"
 		+ "· 큰길: 기둥의 ‘딱, 딱’ 위치 알림음을 찾아 버튼을 누르고, 녹색 신호 안내를 기다리자.\n"
 		+ "  녹색 신호 동안 건너편 기둥에서 유도음이 난다.\n"
-		+ "· 엘리베이터 버튼 위에는 점자가 있다. 버튼 위를 천천히 훑으면 읽을 수 있다.\n"
-		+ "· 허리 위 돌출물은 지팡이에 닿지 않는다.\n\n"
+		+ "· 엘리베이터 버튼 위에는 점자가 있다. 버튼 위를 천천히 훑으면 읽을 수 있다.\n\n"
 		+ "%s: 계속하기 · %s: 처음부터 다시 시작" % [_k("pause_game"), _k("restart_game")])
 	action.text = "다시 걷는다"
+	skip_button.text = "연습 건너뛰기"
+	skip_button.visible = tutorial_active
 	settings_button.visible = true
 	menu_button.visible = true
 
@@ -743,11 +808,25 @@ func _open_settings() -> void:
 func _on_action() -> void:
 	if finished:
 		story_page += 1
-		if story_page >= 3:
+		if story_page >= 4:
 			get_tree().reload_current_scene()
 		else:
 			_show_ending_page()
 		return
+	if playing:
+		_resume()
+		return
+	_begin(true)
+
+
+func _resume() -> void:
+	paused = false
+	panel.hide()
+	message.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _begin(with_tutorial: bool) -> void:
 	playing = true
 	paused = false
 	panel.hide()
@@ -755,7 +834,18 @@ func _on_action() -> void:
 	cane.visible = true
 	aim.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	_notify("병원은 골목 끝, 큰길 건너편에 있다.\n발 앞을 지팡이로 짚어(%s) 점자블록을 찾아보자." % _k("cane_tap"), 7)
+	if with_tutorial:
+		_start_tutorial()
+	else:
+		_start_main(false)
+
+
+func _on_skip() -> void:
+	if not playing:
+		_begin(false)
+	elif tutorial_active:
+		_resume()
+		_start_main(false)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if settings_open:
@@ -784,6 +874,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		player.rotation.y -= event.relative.x * sens
 		pitch = clampf(pitch - dy * sens, -1.35, 0.35)
 		camera.rotation.x = pitch
+	if helping:
+		return
 	if event.is_action_pressed("cane_tap"):
 		_start_tap(aim_info)
 	if event.is_action_pressed("tap"):
@@ -810,11 +902,13 @@ func _physics_process(delta: float) -> void:
 	if message_ttl <= 0:
 		message.text = ""
 
+	_update_crouch(delta)
 	var input := Input.get_vector("left", "right", "forward", "back")
-	if stun > 0 or touch_open:
+	if stun > 0 or touch_open or helping:
 		input = Vector2.ZERO
 	var direction := player.transform.basis * Vector3(input.x, 0, input.y)
-	var speed := SPEED * (SPRINT_MULT if Input.is_action_pressed("sprint") else 1.0)
+	var speed := SPEED * (SPRINT_MULT if Input.is_action_pressed("sprint") and crouch_t < 0.5 else 1.0)
+	speed *= lerpf(1.0, CROUCH_SPEED, crouch_t)
 	player.velocity.x = direction.x * speed
 	player.velocity.z = direction.z * speed
 	if not player.is_on_floor():
@@ -825,14 +919,23 @@ func _physics_process(delta: float) -> void:
 	player.move_and_slide()
 	_check_collisions()
 	var moved := Vector2(player.global_position.x - before.x, player.global_position.z - before.z).length()
-	step_dist += moved
-	if step_dist > STEP_LENGTH:
-		step_dist = 0
-		step_left = not step_left
-		_play_sound(sound_step, player.global_position + player.global_transform.basis.x * (-0.12 if step_left else 0.12), -22)
-	camera.position.y = 1.6 - absf(sin(step_dist / STEP_LENGTH * PI)) * 0.016 * minf(moved * 60.0, 1.0)
+	# 걸음 위상: 실제로 이동한 거리만큼 진행한다. 한 걸음 = 지팡이 짚기 한 번 (이점 촉타법)
+	var old_phase := step_phase
+	if moved > 0.0005:
+		step_phase += moved / STEP_LENGTH
+	elif step_phase - floorf(step_phase) > 0.001:
+		step_phase = minf(step_phase + delta * 1.4, ceilf(step_phase))  # 멈추면 끝까지 마저 내려놓는다
+	var touchdown := floorf(step_phase) > floorf(old_phase)
+	if touchdown and moved > 0.0005:
+		# in-step: 지팡이 끝 반대쪽 발이 디딘다
+		var cane_right := cos(floorf(step_phase) * PI) > 0.0
+		_play_sound(sound_step, player.global_position + player.global_transform.basis.x * (-0.12 if cane_right else 0.12), -22)
+	if tutorial_active:
+		tut_walked += moved
+	var eye := lerpf(STAND_EYE, CROUCH_EYE, crouch_t)
+	camera.position.y = eye - absf(sin(step_phase * PI)) * 0.016 * minf(moved * 60.0, 1.0)
 
-	_update_cane(delta)
+	_update_cane(delta, touchdown)
 	if shake > 0:
 		shake = maxf(shake - delta, 0)
 		var fx := 1.0 if Settings.screen_effects else 0.0
@@ -864,9 +967,11 @@ func _physics_process(delta: float) -> void:
 	var hint := ""
 	if not near_item.is_empty():
 		hint = _k("interact") + "  " + str(near_item["hint"]) + "   ·   "
-	status.text = hint + "%s 짚기 · %s 발 앞 · %s 휴대폰 · %s 도움말" % [_k("cane_tap"), _k("tap"), _k("phone"), _k("pause_game")]
+	if tutorial_active:
+		hint = "연습 %d/5   ·   " % mini(tut_step + 1, 5) + hint
+	status.text = hint + "%s 짚기 · %s 웅크리기 · %s 휴대폰 · %s 도움말" % [_k("cane_tap"), _k("crouch"), _k("phone"), _k("pause_game")]
 
-	var outside := player.global_position.z > -62.5 and player.global_position.x < 40.0
+	var outside := player.global_position.z > -62.5 and player.global_position.x < 40.0 and not tutorial_active
 	beacon_clock += delta
 	if beacon_clock > 4.5 and outside:
 		beacon_clock = 0
@@ -875,10 +980,14 @@ func _physics_process(delta: float) -> void:
 	if gps_clock > 15.0:
 		_reroll_gps()
 	_story_checkpoints(noise_distance)
+	if tutorial_active:
+		_tutorial_process()
+	else:
+		_help_process(delta)
 
 func _story_checkpoints(noise_distance: float) -> void:
 	var p := player.global_position
-	if p.x > 40.0:
+	if p.x > 40.0 or tutorial_active:
 		return
 	if _once("gate1", p.z < -13):
 		_notify("첫 가림막을 지났다. 점자블록이 다시 이어지는지 지팡이로 찾아보자.", 6)
@@ -902,7 +1011,8 @@ func _once(key: String, condition: bool) -> bool:
 # ================================================================ cane
 
 func _hand() -> Vector3:
-	return player.global_transform * HAND_LOCAL
+	# 웅크리면 손(배꼽) 높이도 내려간다
+	return player.global_transform * Vector3(HAND_LOCAL.x, lerpf(HAND_LOCAL.y, 0.62, crouch_t), HAND_LOCAL.z)
 
 # 지팡이 끝이 닿을 곳: 조준점이 지팡이 길이 안이면 그곳, 아니면 같은 방향의 가장 먼 바닥.
 func _cane_target(straight_ahead: bool) -> Dictionary:
@@ -969,16 +1079,17 @@ func _rest_tip(hand: Vector3) -> Vector3:
 		return r["position"]
 	return target
 
-func _update_cane(delta: float) -> void:
+func _update_cane(delta: float, touchdown: bool) -> void:
 	var hand := _hand()
-	var rest := _rest_tip(hand)
-	aim_info = {} if touch_open else _cane_target(false)
+	# 걸을 때는 걸음에 맞춰 좌우를 짚고(자동), 클릭하면 그 동작 위에 직접 짚기가 끼어든다.
+	var rest := _sweep_tip(hand, touchdown, delta) if Settings.auto_sweep else _rest_tip(hand)
+	aim_info = {} if (touch_open or helping) else _cane_target(false)
 	marker.visible = not aim_info.is_empty() and tap_t < 0
 	if marker.visible:
 		var mp: Vector3 = aim_info["point"]
 		var n: Vector3 = aim_info["normal"]
 		marker.position = mp + n * 0.02
-		if absf(n.y) > 0.7:
+		if absf(n.y) > 0.7 or n.length_squared() < 0.25:
 			marker.rotation = Vector3.ZERO
 		else:
 			marker.look_at(mp + n * 2.0, Vector3.UP)
@@ -1018,6 +1129,7 @@ func _cane_impact(info: Dictionary) -> void:
 		var surface := _surface_at(p)
 		if surface != "":
 			_play_sound(sound_paving, p, -10)
+			_touched_paving(p)
 		else:
 			_play_sound(sound_tap, p + Vector3(0,0.05,0), -9)
 		_paving_feedback(surface)
@@ -1066,9 +1178,11 @@ func _check_collisions() -> void:
 			player.global_position -= Vector3(back.x, 0, back.z) * 0.12
 			var text := "쿵— 이마를 무언가에 부딪혔다.\n"
 			if label == "overhang_sign":
-				text += "벽에서 튀어나온 간판이다. 머리 높이의 돌출물은 지팡이로 알 수 없다."
+				text += "벽에서 튀어나온 간판이다. 머리 높이의 돌출물은 지팡이로 알 수 없다.\n%s를 누른 채 몸을 낮추면 아래로 지나갈 수 있다." % _k("crouch")
+			elif label == "tut_beam":
+				text += "복도 천장에서 내려온 배관이다. %s를 누른 채 몸을 낮춰 지나가 보자." % _k("crouch")
 			else:
-				text += "공사용 파이프가 머리 높이로 튀어나와 있다. 몸을 낮추거나 돌아가야 한다."
+				text += "공사용 파이프가 머리 높이로 튀어나와 있다. %s를 누른 채 몸을 낮추거나 돌아가야 한다." % _k("crouch")
 			_notify(text, 6)
 			return
 		if label != "" and absf(c.get_normal().y) < 0.5 and bump_cooldown <= 0:
@@ -1137,6 +1251,8 @@ func _describe_contact(label: String, prefix: String) -> void:
 		"elev_door": "가운데가 갈라진 금속 문 — 엘리베이터 문이다. 문 오른쪽 벽에 호출 버튼이 있다.",
 		"room_door": "문이다. 문 옆 명패에 점자가 있을지도 모른다. (%s)" % _k("interact"),
 		"rail": "벽을 따라 이어진 손잡이. 따라가면 복도 끝까지 갈 수 있다.",
+		"home_door": "우리 집 현관문이다. 이제 출발이다.",
+		"tut_door": "유리문 — 공동현관이다. 오른쪽 벽에 열림 버튼이 있다. (%s)" % _k("interact"),
 	}
 	if texts.has(label):
 		_notify(prefix + str(texts[label]), 4.5)
@@ -1437,7 +1553,9 @@ func _interact() -> void:
 		_notify("손을 뻗어 보지만 아무것도 닿지 않는다.", 2)
 		return
 	var kind := str(near_item["kind"])
-	if kind == "signal":
+	if kind == "tut_door":
+		_tut_press_door()
+	elif kind == "signal":
 		_press_signal()
 	elif kind.begins_with("call"):
 		_open_touch("call", near_item)
@@ -1624,6 +1742,13 @@ func _phone_guide() -> void:
 	if gps_cooldown > 0:
 		return
 	gps_cooldown = 3.0
+	if tutorial_active:
+		var tline := "현재 위치는 집 앞입니다. 목적지까지 약 70미터, 12시 방향입니다."
+		_notify("휴대폰 음성 안내: “%s”\n(실제 휴대폰 보행 안내처럼 대략적인 거리와 시계 방향으로만 알려 준다)" % tline, 6)
+		_speak(tline)
+		if tut_step == 3:
+			get_tree().create_timer(2.5).timeout.connect(func(): _tut_advance(4))
+		return
 	if player.global_position.z < -62.5 or player.global_position.x > 40.0:
 		_say("실내에서는 위치 안내를 할 수 없습니다.", 3)
 		return
@@ -1675,13 +1800,35 @@ func _finish() -> void:
 	_show_ending_page()
 
 func _show_ending_page() -> void:
-	var titles := ["01  /  503호", "02  /  목소리", "03  /  잔향"]
-	var pages := ["문 옆 명패의 점자를 손끝으로 한 번 더 확인하고, 문을 두드렸다.\n\n“들어오세요.”\n\n소독약 냄새 사이로, 익숙한 목소리가 들린다.", "손을 뻗자, 거칠고 따뜻한 손이 잡힌다.\n\n“왔니?”\n“응. 나 왔어.”\n\n오는 길에 하고 싶던 말은 많았는데,\n그 짧은 대답이면 충분했다.", "보이지 않는 길에도, 돌아갈 곳은 있었다.\n\nDANDELION — 끝\n\n걸린 시간  %d분 %02d초\n지팡이에 걸린 장애물  %d번 · 머리를 부딪힌 횟수  %d번 · 경적  %d번\n\n점자블록 위의 킥보드, 머리 높이의 간판, 뜯겨 나간 점자블록,\n안내음을 덮는 소음, 손끝으로 느낄 수 없는 횡단보도의 흰 칠,\n버튼 위 손톱만 한 점자 — 모두 누군가에게는 매일의 길입니다.\n\n이 작품의 윤곽선은 허구적 시각화입니다." % [int(elapsed)/60, int(elapsed)%60, count_contacts, count_head, count_honk]]
+	var titles := ["01  /  503호", "02  /  목소리", "03  /  잔향", "04  /  함께 걷는 법"]
+	var record := "걸린 시간  %d분 %02d초\n지팡이에 걸린 장애물  %d번 · 머리를 부딪힌 횟수  %d번 · 경적  %d번 · 도움을 받은 횟수  %d번" % [int(elapsed)/60, int(elapsed)%60, count_contacts, count_head, count_honk, count_help]
+	var pages := [
+		"문 옆 명패의 점자를 손끝으로 한 번 더 확인하고, 문을 두드렸다.\n\n“들어오세요.”\n\n소독약 냄새 사이로, 익숙한 목소리가 들린다.",
+		"손을 뻗자, 거칠고 따뜻한 손이 잡힌다.\n\n“왔니?”\n“응. 나 왔어.”\n\n오는 길에 하고 싶던 말은 많았는데,\n그 짧은 대답이면 충분했다.",
+		("보이지 않는 길에도, 돌아갈 곳은 있었다.\n\nDANDELION — 끝\n\n" + record + "\n\n"
+			+ "점자블록 위의 킥보드, 머리 높이의 간판, 뜯겨 나간 점자블록,\n안내음을 덮는 소음, 손끝으로 느낄 수 없는 횡단보도의 흰 칠,\n"
+			+ "버튼 위 손톱만 한 점자 — 모두 누군가에게는 매일의 길입니다.\n\n오늘 길에서 겪은 불편은 눈이 아니라 길이 만든 것이었습니다."),
+		("이 길을 매일 걷는 이웃과 함께하는 방법\n\n"
+			+ "길에서\n"
+			+ "· 점자블록 위에는 킥보드, 자전거, 짐을 세워 두지 마세요. 점자블록은 누군가의 길입니다.\n"
+			+ "· 공사를 할 때는 점자블록이 끊기지 않게 하고, 돌아가는 길을 안내해 주세요.\n"
+			+ "· 머리 높이의 간판이나 나뭇가지처럼 튀어나온 것은 지팡이로 알 수 없습니다.\n"
+			+ "· 횡단보도 음향신호기와 점자 버튼이 고장 나 있으면 관리 기관에 알려 주세요.\n\n"
+			+ "도움을 드릴 때\n"
+			+ "· 먼저 “도와드릴까요?” 하고 물어보고, 원할 때만 도와주세요.\n"
+			+ "· 갑자기 팔이나 지팡이를 잡아끌지 마세요. 내 팔꿈치를 잡게 하고 반 걸음 앞에서 걸어 주세요.\n"
+			+ "· 길은 “저기”보다 “오른쪽으로 다섯 걸음”처럼 구체적으로 알려 주세요.\n"
+			+ "· 안내견은 일하는 중입니다. 만지거나 부르거나 먹을 것을 주지 마세요.\n"
+			+ "· 자리를 떠날 때는 말로 알려 주세요.\n\n"
+			+ "작은 배려가 끊긴 길을 다시 잇습니다.\n\n"
+			+ "이 작품의 윤곽선은 허구적 시각화이며, 실제 경험은 사람마다 다릅니다."),
+	]
 	title.text = titles[story_page]
 	body.text = pages[story_page]
-	action.text = "처음부터 다시 걷기" if story_page == 2 else "계속"
+	action.text = "처음부터 다시 걷기" if story_page == 3 else "계속"
+	skip_button.visible = false
 	settings_button.visible = false
-	menu_button.visible = story_page == 2
+	menu_button.visible = story_page == 3
 
 # ================================================================ audio
 
@@ -1777,3 +1924,329 @@ func _make_sound(frequency: float, duration: float, kind: int) -> AudioStreamWAV
 		stream.loop_begin = 0
 		stream.loop_end = count
 	return stream
+
+
+# ================================================================ v0.3.0: 자동 좌우 짚기
+
+# 걸음 위상에 맞춰 지팡이 끝이 좌우 호를 그린다. 정수 위상에서 좌/우 끝을 짚고, 가운데에서는 살짝 뜬다.
+func _sweep_tip(hand: Vector3, touchdown: bool, delta: float) -> Vector3:
+	sweep = cos(step_phase * PI)
+	var lift := TIP_LIFT * absf(sin(step_phase * PI))
+	var floor_y := player.global_position.y
+	var drop := (hand.y - floor_y) - lift
+	var reach := sqrt(maxf(CANE_LENGTH * CANE_LENGTH - drop * drop, 0.01))
+	var yaw := sweep * SWEEP_ANGLE
+	var target := player.global_transform * Vector3(sin(yaw) * reach, 0.0, HAND_LOCAL.z - cos(yaw) * reach)
+	target.y = floor_y + lift
+	var dir := (target - hand).normalized()
+	var q := PhysicsRayQueryParameters3D.create(hand, target + dir * 0.05, 1, [player.get_rid()])
+	q.hit_from_inside = true
+	var r := get_world_3d().direct_space_state.intersect_ray(q)
+	var tip := target
+	var contact := false
+	var label := ""
+	if not r.is_empty():
+		var point: Vector3 = r["position"]
+		var normal: Vector3 = r["normal"]
+		tip = point
+		if not (normal.y > 0.7 and point.y < 0.06):
+			contact = true
+			var col: Object = r["collider"]
+			if col and col.has_meta("label"):
+				label = str(col.get_meta("label"))
+	sweep_refresh = maxf(sweep_refresh - delta, 0.0)
+	if tap_t < 0.0 and not helping:
+		if contact and (not sweep_contact or label != sweep_contact_label):
+			# 지팡이가 물체에 걸림
+			count_contacts += 1
+			sweep_refresh = 0.45
+			_pulse(tip, OBSTACLE_TOUCH, ECHO_WALK * 0.6)
+			_mark(tip)
+			_play_sound(sound_knock, tip, -9)
+			shake = maxf(shake, 0.08)
+			_describe_contact(label, "")
+		elif contact and sweep_refresh <= 0.0:
+			# 걸린 채 더듬으면 모양이 조금씩 드러난다
+			sweep_refresh = 0.45
+			_pulse(tip, OBSTACLE_TOUCH, 0.0)
+		var over := ""
+		if not contact and tip.y < floor_y + 0.06:
+			over = _surface_at(tip)
+		if over != "":
+			_touched_paving(tip)
+			if not sweep_over_paving:
+				# 호를 그리는 지팡이 끝이 점자블록 돌기를 스친다 (드르륵)
+				_pulse(tip, TOUCH_RADIUS, 0.0)
+				_play_sound(sound_paving, tip, -12)
+				_paving_feedback(over)
+		sweep_over_paving = over != ""
+		if touchdown and not contact:
+			_pulse(tip, TOUCH_RADIUS, ECHO_WALK)
+			_mark(tip)
+			_play_sound(sound_tap, tip, -16)
+			if over == "":
+				_paving_feedback("")
+				if tip.z < ROAD_Z0 + 0.05 and tip.z > ROAD_Z1 - 0.05 and absf(tip.x) < 30.0:
+					_once_notify("asphalt", "매끈한 아스팔트. 횡단보도의 흰 칠은 지팡이로 느낄 수 없다.\n방향은 신호기 소리로 잡아야 한다.", 5)
+	sweep_contact = contact
+	sweep_contact_label = label if contact else ""
+	return tip
+
+
+# ================================================================ v0.3.0: 웅크리기
+
+func _update_crouch(delta: float) -> void:
+	var want := Input.is_action_pressed("crouch") and not touch_open and not helping
+	if want:
+		crouching = true
+	elif crouching:
+		if _can_stand():
+			crouching = false
+		else:
+			_once_notify("cant_stand", "머리 위에 무언가 있어 일어설 수 없다. 몸을 낮춘 채 조금 더 지나가자.", 3.5)
+	crouch_t = move_toward(crouch_t, 1.0 if crouching else 0.0, delta * 5.0)
+	var h := lerpf(STAND_HEIGHT, CROUCH_HEIGHT, crouch_t)
+	player_shape.height = h
+	player_collider.position.y = h * 0.5
+	# 몸을 낮춘 채 돌출물 아래를 지나가는 중
+	if crouch_t > 0.9 and not _can_stand():
+		if tutorial_active:
+			tut_ducked = true
+		var key := "duck_%d" % int(round(player.global_position.z))
+		if not flags.has("duck_any") or (not flags.has(key) and player.global_position.z < -15.0):
+			flags["duck_any"] = true
+			flags[key] = true
+			_notify("몸을 낮춘 채 머리 위 돌출물 아래를 지나간다.", 3)
+
+
+# 서 있는 높이의 캡슐을 놓아 보고, 머리 위에 막힌 것이 없으면 일어설 수 있다.
+func _can_stand() -> bool:
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.25
+	shape.height = STAND_HEIGHT - 0.1
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape
+	q.transform = Transform3D(Basis(), player.global_position + Vector3(0, STAND_HEIGHT * 0.5 + 0.06, 0))
+	q.exclude = [player.get_rid()]
+	q.collision_mask = 1
+	return get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty()
+
+
+# ================================================================ v0.3.0: 연습 구간 (아파트 1층 복도 → 공동현관)
+
+func _build_tutorial() -> void:
+	var x := TUT_X
+	_box(Vector3(x, -0.25, -6), Vector3(10, 0.5, 26), "", 0.0, false)          # 바닥
+	_box(Vector3(x - 2.5, 2.5, -6), Vector3(1, 5, 22), "wall", 1.0)
+	_box(Vector3(x + 2.5, 2.5, -6), Vector3(1, 5, 22), "wall", 1.0)
+	_box(Vector3(x, 2.5, 5), Vector3(6, 5, 1), "home_door", 1.0)              # 우리 집 현관 쪽 벽
+	# 공동현관: 가운데 1.6m 출입구, 유리문
+	_box(Vector3(x - 1.65, 2.5, -16.5), Vector3(1.7, 5, 1), "wall", 1.0)
+	_box(Vector3(x + 1.65, 2.5, -16.5), Vector3(1.7, 5, 1), "wall", 1.0)
+	_box(Vector3(x, 3.75, -16.5), Vector3(1.6, 2.5, 1), "wall", 1.0)
+	var door := StaticBody3D.new()
+	door.position = Vector3(x, 1.25, -16.3)
+	door.set_meta("label", "tut_door")
+	door.set_meta("overhang", false)
+	var shape_node := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.6, 2.5, 0.08)
+	shape_node.shape = shape
+	door.add_child(shape_node)
+	var vis := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(1.6, 2.5, 0.08)
+	vis.mesh = bm
+	vis.material_override = black_material
+	door.add_child(vis)
+	door.add_child(_outline_mesh([[Vector3.ZERO, Vector3(1.6, 2.5, 0.08)]], 0.6))
+	add_child(door)
+	tut_door_nodes.append(door)
+	# 열림 버튼 (문 오른쪽 벽)
+	_box(Vector3(x + 1.97, 1.1, -15.6), Vector3(0.04, 0.22, 0.16), "", 0.0, true, false)
+	interactables.append({"pos": Vector3(x + 1.3, 0, -15.3), "r": 1.5, "kind": "tut_door", "hint": "공동현관 열림 버튼 누르기"})
+	# 머리 높이 배관 (웅크리기 연습)
+	_box(Vector3(x, 1.55, TUT_BEAM_Z), Vector3(4.0, 0.14, 0.14), "tut_beam", 0.0, true, true, true)
+	# 점자블록: 집 앞 → 꺾임 → 복도 → 공동현관 앞 점형블록
+	_paving_path([Vector2(x - 1, 4.2), Vector2(x - 1, -2.5), Vector2(x + 1, -2.5), Vector2(x + 1, -14.0), Vector2(x, -14.0), Vector2(x, -15.35)])
+	_warning_block(Rect2(x - 0.6, -15.95, 1.2, 0.6))
+	_grid(x - 2.0, x + 2.0, 4.5, -16.0, 0.5)
+
+
+# 끊김 없는 점자블록 경로 (꺾이는 곳마다 점형블록)
+func _paving_path(path: Array[Vector2]) -> void:
+	var w := 0.15
+	for i in range(path.size() - 1):
+		var a := path[i]
+		var b := path[i + 1]
+		var along_z := is_equal_approx(a.x, b.x)
+		var rect := Rect2(a.x - w, minf(a.y, b.y), w * 2, absf(a.y - b.y)) if along_z else Rect2(minf(a.x, b.x), a.y - w, absf(a.x - b.x), w * 2)
+		_paving_rect(rect, along_z)
+		if i > 0:
+			_warning_block(Rect2(a.x - w, a.y - w, w * 2, w * 2))
+
+
+func _start_tutorial() -> void:
+	tutorial_active = true
+	tut_step = 0
+	tut_walked = 0.0
+	player.global_position = Vector3(TUT_X - 1.0, 0.05, 3.4)
+	player.rotation.y = 0.0
+	step_phase = 0.0
+	_tut_prompt()
+
+
+const TUT_PROMPTS := [
+	"[연습 1/5] 아파트 1층 복도. 현관을 나서기 전에 지팡이 감각을 익히자.\n%s로 걸어 보자. 걸으면 지팡이가 걸음에 맞춰 좌우를 번갈아 짚는다.",
+	"[연습 2/5] 발밑의 노란 점자블록을 따라가자. 지팡이 끝이 줄무늬를 스치면 ‘드르륵’ 소리가 난다.\n꺾이는 곳의 오돌토돌한 점형블록에서 방향을 바꾸자.",
+	"[연습 3/5] 경비 아저씨가 “복도 중간에 배관이 낮게 내려와 있어요, 머리 조심하세요” 하셨다.\n머리 높이는 지팡이로 알 수 없다. %s를 누른 채 몸을 낮춰 지나가자.",
+	"[연습 4/5] 휴대폰 보행 안내를 들어 보자. %s를 누르면 목적지까지의 거리와 방향을 알려 준다.",
+	"[연습 5/5] 공동현관이다. 문 오른쪽 벽의 열림 버튼을 손으로 더듬어 누르자. (%s)",
+]
+
+
+func _tut_prompt() -> void:
+	var t: String = TUT_PROMPTS[tut_step]
+	match tut_step:
+		0: t = t % _k("forward")
+		2: t = t % _k("crouch")
+		3: t = t % _k("phone")
+		4: t = t % _k("interact")
+	_notify(t, 9999.0)
+
+
+func _tut_advance(to_step: int) -> void:
+	if not tutorial_active or tut_step >= to_step:
+		return
+	tut_step = to_step
+	_play_sound(sound_ding, player.global_position + Vector3(0, 1.6, -0.5), -16)
+	_tut_prompt()
+
+
+func _tutorial_process() -> void:
+	var p := player.global_position
+	match tut_step:
+		0:
+			if tut_walked > 2.0:
+				_tut_advance(1)
+		1:
+			if tut_touched_paving and p.z < -6.0:
+				_tut_advance(2)
+		2:
+			if tut_ducked and p.z < TUT_BEAM_Z - 0.6:
+				_tut_advance(3)
+		4:
+			if tut_exit_open and p.z < -16.9:
+				_start_main(true)
+
+
+func _tut_press_door() -> void:
+	if tut_exit_open:
+		return
+	if tut_step < 4:
+		_notify("열림 버튼이다. 먼저 앞의 연습을 마쳐 보자. (일시정지 화면에서 ‘연습 건너뛰기’도 할 수 있다)", 4)
+		return
+	tut_exit_open = true
+	_play_sound(sound_click, Vector3(TUT_X + 1.97, 1.1, -15.6), -6)
+	for n in tut_door_nodes:
+		n.queue_free()
+	tut_door_nodes.clear()
+	_say("문이 열립니다.", 2.5)
+	get_tree().create_timer(2.6).timeout.connect(func():
+		if tutorial_active:
+			_notify("연습 끝! 열린 문으로 걸어 나가면 골목이다.\n이제부터는 안내가 없다. 지금까지 익힌 감각으로 병원 503호까지 가자.", 9999.0))
+
+
+# 본 게임 시작: 골목 입구로 나간다. 연습에서의 기록은 지운다.
+func _start_main(from_tutorial: bool) -> void:
+	tutorial_active = false
+	if from_tutorial:
+		fade.color.a = 1.0
+		create_tween().tween_property(fade, "color:a", 0.0, 1.2)
+	player.global_position = MAIN_START
+	player.velocity = Vector3.ZERO
+	player.rotation.y = 0.0
+	pitch = -0.55
+	camera.rotation.x = pitch
+	step_phase = 0.0
+	elapsed = 0.0
+	count_contacts = 0
+	count_head = 0
+	count_honk = 0
+	count_help = 0
+	no_paving_time = 0.0
+	last_paving_pos = Vector3(0, 0.05, 3.2)
+	on_paving_msg = true if from_tutorial else on_paving_msg
+	_notify("공동현관을 나섰다. 병원은 골목 끝, 큰길 건너편에 있다.\n발밑의 점자블록을 찾아 따라가 보자.", 7)
+
+
+# ================================================================ v0.3.0: 도와주는 사람
+
+func _touched_paving(p: Vector3) -> void:
+	no_paving_time = 0.0
+	if tutorial_active:
+		tut_touched_paving = true
+		return
+	if p.z > -62.5 and p.x < 40.0:
+		last_paving_pos = Vector3(p.x, 0.05, p.z)
+
+
+func _help_process(delta: float) -> void:
+	if helping or touch_open or finished:
+		return
+	var p := player.global_position
+	if p.z < -62.5 or p.x > 40.0:
+		no_paving_time = 0.0     # 병원 안에서는 도움 기능을 쓰지 않는다
+		return
+	if _surface_at(p) != "":
+		no_paving_time = 0.0
+		last_paving_pos = Vector3(p.x, 0.05, p.z)
+		return
+	if p.distance_to(SIGNAL_POLE) < 2.5 or p.distance_to(SIGNAL_FAR) < 2.5:
+		return                   # 신호기 앞에서 신호를 기다리는 중
+	no_paving_time += delta
+	if no_paving_time >= HELP_DELAY:
+		_start_help()
+
+
+func _wait(t: float) -> void:
+	await get_tree().create_timer(t).timeout
+
+
+func _helper_say(line: String, duration: float) -> void:
+	_notify("지나가던 사람: “%s”" % line, duration)
+	_speak(line)
+	await _wait(duration)
+
+
+func _start_help() -> void:
+	helping = true
+	no_paving_time = 0.0
+	count_help += 1
+	var p := player.global_position
+	var fwd := -player.global_transform.basis.z
+	for i in 3:
+		_play_sound(sound_step, p + fwd * (3.0 - i * 0.8) + player.global_transform.basis.x * 0.8, -16)
+		await _wait(0.35)
+	await _helper_say("저기요, 혹시 길을 찾고 계세요? 도와드릴까요?", 4.0)
+	_notify("나: “네… 점자블록을 놓친 것 같아요.”", 2.5)
+	await _wait(2.5)
+	await _helper_say("도와드릴게요. 제가 팔을 살짝 터치해도 될까요?", 4.0)
+	_notify("나: “네, 괜찮아요.”", 2.0)
+	await _wait(2.0)
+	await _helper_say("제 팔꿈치를 잡으세요. 제가 반 걸음 앞에서 천천히 걸을게요. 마지막으로 점자블록이 있던 곳까지 같이 가요.", 5.5)
+	var tw := create_tween()
+	tw.tween_property(fade, "color:a", 0.85, 0.8)
+	await tw.finished
+	for i in 6:
+		_play_sound(sound_step, player.global_position + player.global_transform.basis.x * (-0.12 if i % 2 == 0 else 0.12), -18)
+		await _wait(0.45)
+	player.global_position = last_paving_pos
+	player.velocity = Vector3.ZERO
+	step_phase = 0.0
+	var tw2 := create_tween()
+	tw2.tween_property(fade, "color:a", 0.0, 0.8)
+	await tw2.finished
+	await _helper_say("여기 발밑부터 점자블록이 다시 이어져요. 조심히 가세요!", 4.0)
+	_notify("나: “고맙습니다!”", 2.5)
+	helping = false

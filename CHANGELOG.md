@@ -2,11 +2,27 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르고, 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따릅니다.
 
-## [Unreleased]
+## [0.3.0] - 2026-11-04
 
 ### 추가
+- **연습 구간(튜토리얼)**: 집 앞 아파트 1층 복도 → 공동현관. 걷기, 점자블록 따라가기, 웅크리기, 휴대폰 안내(Q), 손으로 버튼 누르기(E) 5단계. 시작 화면의 `바로 출발`, 일시정지 화면의 `연습 건너뛰기`로 넘길 수 있음
+- **웅크리기**(기본 Ctrl, 누르고 있기): 눈높이·몸 높이·손 높이가 낮아져 머리 높이 간판과 공사 파이프 아래를 지나갈 수 있음. 돌출물 아래에서는 일어서지 않음
+- **도와주는 사람**: 병원 밖에서 점자블록을 1분 동안 건드리지 못하면 지나가던 사람이 TTS로 먼저 묻고(“도와드릴까요?”, “제가 팔을 살짝 터치해도 될까요?”) 마지막으로 점자블록을 건드린 곳까지 데려다줌. 엔딩에 도움을 받은 횟수 기록
+- **엔딩 ‘04 / 함께 걷는 법’**: 길에서 할 수 있는 일과 시각장애인을 돕는 방법을 정리한 교육 페이지
+- **민들레 아이콘**(`Dandelion/icon.png`, `icon.ico`): 게임 창, 부팅 화면, Windows 실행 파일 아이콘
+- 설정 → 조작: ‘걸을 때 지팡이 자동으로 짚기’ 켜기/끄기
 - 실행 파일 내보내기 설정(`Dandelion/export_presets.cfg`): Windows Desktop(`build/windows/Dandelion.exe`, 게임 데이터 포함 단일 파일)과 Linux. Godot 없이 실행 가능
 - README에 실행 파일로 바로 실행하는 법과 내보내기 방법 추가
+
+### 변경
+- v0.1.0의 **자동 좌우 짚기(이점 촉타법)** 복원. 걸음에 맞춰 지팡이가 좌우를 번갈아 짚고, 좌클릭·Space 직접 짚기는 그 위에 끼어들어 함께 동작
+- 머리를 부딪혔을 때 웅크리기 키를 안내하도록 문구 변경
+- 시작 화면, 도움말, 상태 줄에 웅크리기와 자동 짚기 안내 추가
+- Windows 실행 파일 버전 정보를 0.3.0.0으로 변경
+
+### 수정
+- 일시정지 후 `다시 걷는다`를 누르면 시작 안내 문구가 다시 나오던 문제
+- 지팡이 조준이 물체 안쪽에서 시작될 때 콘솔에 `look_at()` 오류가 반복 출력되던 문제
 
 ## [0.2.1] - 2026-11-03
 
@@ -53,6 +69,7 @@
 ### 변경
 - 프로젝트 이름을 임시 이름 `Echo Road(잔향)`에서 `민들레(Dandelion)`로 변경
 
+[0.3.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.3.0
 [0.2.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.2.1
 [0.2.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.2.0
 [0.1.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.1.0

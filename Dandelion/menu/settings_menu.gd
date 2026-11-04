@@ -157,6 +157,7 @@ func _build_control_tab() -> void:
 	var p := _page("조작")
 	_slider(p, "mouse_sensitivity", "마우스 감도", 0.2, 3.0, 0.05, func(v): return "×%.2f" % v,
 		"몸을 돌리고 고개를 숙이는 속도입니다.")
+	_check(p, "auto_sweep", "걸을 때 지팡이 자동으로 짚기", "걸음에 맞춰 지팡이가 좌우를 번갈아 짚습니다(이점 촉타법). 끄면 클릭으로만 짚습니다.")
 	_check(p, "invert_y", "마우스 상하 반전", "마우스를 위로 올리면 고개를 숙입니다.")
 	_slider(p, "fov", "시야각", 60.0, 100.0, 1.0, func(v): return "%d°" % int(v),
 		"넓을수록 화면에 더 많이 보이지만 멀미가 날 수 있습니다.")

@@ -14,6 +14,7 @@ const ACTIONS := [
 	["left", "왼쪽 옆걸음", "key:%d" % KEY_A],
 	["right", "오른쪽 옆걸음", "key:%d" % KEY_D],
 	["sprint", "서두르기", "key:%d" % KEY_SHIFT],
+	["crouch", "웅크리기 (누르고 있기)", "key:%d" % KEY_CTRL],
 	["cane_tap", "바라보는 곳 짚기", "mouse:%d" % MOUSE_BUTTON_LEFT],
 	["tap", "발 앞 짚기", "key:%d" % KEY_SPACE],
 	["interact", "손으로 더듬기", "key:%d" % KEY_E],
@@ -33,6 +34,7 @@ const DEFAULTS := {
 	"text_scale": 1.0,          # 1.0 / 1.15 / 1.3
 	"screen_effects": true,     # 부딪힐 때 흔들림·번쩍임
 	"show_aim": true,
+	"auto_sweep": true,         # 걸을 때 지팡이가 걸음에 맞춰 자동으로 좌우를 짚는다
 	"fullscreen": false,
 }
 
@@ -68,6 +70,8 @@ var screen_effects: bool:
 	get: return bool(get_value("screen_effects"))
 var show_aim: bool:
 	get: return bool(get_value("show_aim"))
+var auto_sweep: bool:
+	get: return bool(get_value("auto_sweep"))
 
 
 func font_size(base: int) -> int:

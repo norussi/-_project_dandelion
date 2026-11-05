@@ -2,6 +2,20 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르고, 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.3.1] - 2026-11-05
+
+### 추가
+- 건너편(병원 쪽) 신호기 기둥에도 음향신호기 버튼. 위치 알림음은 서 있는 쪽 기둥, 녹색 유도음은 건너편 기둥에서 남
+- 엘리베이터 칸 안 벽의 격자무늬, 버튼판 테두리와 버튼 줄 무늬, 버튼판 설명, 칸에 들어설 때 버튼판 위치 안내
+- 빨간불에 차도에 들어서면 경적과 급정거 뒤 건너기 전 횡단보도 앞으로 되돌아감
+
+### 변경
+- 보행 신호 빨간불 시간 18초 → 60초
+- 엘리베이터 칸 안 어디서든 E로 버튼판을 더듬을 수 있게 범위 확대
+
+### 수정
+- 칸 안 버튼판이 문틀 벽 속에 묻혀 지팡이로 짚이지 않던 문제 (문틀 바로 안쪽 오른쪽 벽으로 옮김)
+
 ## [0.3.0] - 2026-11-04
 
 ### 추가
@@ -69,6 +83,7 @@
 ### 변경
 - 프로젝트 이름을 임시 이름 `Echo Road(잔향)`에서 `민들레(Dandelion)`로 변경
 
+[0.3.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.3.1
 [0.3.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.3.0
 [0.2.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.2.1
 [0.2.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.2.0

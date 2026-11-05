@@ -54,7 +54,7 @@ const CAR_HALF := 2.1
 const SIGNAL_POLE := Vector3(1.6, 0, -46.6)
 const SIGNAL_FAR := Vector3(-1.6, 0, -55.4)
 const PED_GREEN := 15.0
-const PED_RED := 18.0
+const PED_RED := 60.0
 const TARGET_FLOOR := 5
 const TARGET_ROOM := 3
 
@@ -187,6 +187,10 @@ var sig_requested := false
 var sig_warned := false
 var locator_clock := 0.0
 var guide_clock := 0.0
+var road_side := 1          # 1: 골목 쪽(이쪽), -1: 병원 쪽(건너편). 차도에 들어서기 직전 서 있던 쪽
+var in_road := false
+var red_returning := false
+var was_in_car := false
 var cars: Array[Dictionary] = []
 var lane_timer: Array[float] = [1.0, 2.5]
 
@@ -318,6 +322,7 @@ func _build_world() -> void:
 	_box(SIGNAL_POLE + Vector3(0,1.1,0.12), Vector3(0.18,0.26,0.12), "", 0.0, true, false)
 	_box(SIGNAL_FAR + Vector3(0,1.1,-0.12), Vector3(0.18,0.26,0.12), "", 0.0, true, false)
 	interactables.append({"pos": SIGNAL_POLE + Vector3(0,0,0.15), "r": 1.3, "kind": "signal", "hint": "음향신호기 버튼 누르기"})
+	interactables.append({"pos": SIGNAL_FAR + Vector3(0,0,-0.15), "r": 1.3, "kind": "signal", "hint": "음향신호기 버튼 누르기"})
 
 	# --- 병원 앞 보도 (z -55 ~ -62)와 로비 (z -63 ~ -75)
 	_box(Vector3(-8,2.5,-65.5), Vector3(1,5,21), "wall", 1.0)
@@ -418,7 +423,8 @@ func _build_elevator_hall(ox: float, lobby: bool) -> void:
 	_box(Vector3(ox+1.2,1.2,-76.65), Vector3(0.1,2.4,3.3), "elev_wall", 0.8)
 	_box(Vector3(ox,1.2,-78.35), Vector3(2.5,2.4,0.1), "elev_wall", 0.8)
 	_box(Vector3(ox,0.9,-78.27), Vector3(1.8,0.05,0.05), "", 0.0, true, false)     # 손잡이
-	_box(Vector3(ox+1.13,1.1,-75.7), Vector3(0.04,0.55,0.28), "", 0.0, true, false) # 칸 안 버튼판
+	_box(Vector3(ox+1.12,1.1,-76.35), Vector3(0.06,0.7,0.36), "elev_panel", 0.6, true, true) # 칸 안 버튼판 (문틀 바로 안쪽 오른쪽 벽)
+	_car_grid(ox)
 	_box(Vector3(ox+1.6,1.1,-74.98), Vector3(0.22,0.34,0.04), "", 0.0, true, false) # 호출 버튼
 	_grid(ox-1.1, ox+1.1, -75.0, -78.3, 0.3)
 	for side in [-1.0, 1.0]:
@@ -448,7 +454,46 @@ func _build_elevator_hall(ox: float, lobby: bool) -> void:
 			upper_doors.append(door)
 	var tag := "lobby" if lobby else "upper"
 	interactables.append({"pos": Vector3(ox+1.6,0,-74.8), "r": 1.35, "kind": "call_" + tag, "hint": "엘리베이터 호출 버튼 더듬기"})
-	interactables.append({"pos": Vector3(ox+0.9,0,-75.8), "r": 0.95, "kind": "car_" + tag, "hint": "엘리베이터 버튼판 더듬기", "inside": ox})
+	# 칸 안 어디에 서 있든 버튼판을 더듬을 수 있다 (칸 안에 있을 때만)
+	interactables.append({"pos": Vector3(ox+0.8,0,-76.35), "r": 2.6, "kind": "car_" + tag, "hint": "엘리베이터 버튼판 더듬기 (문 쪽 오른쪽 벽)", "inside": ox})
+
+# 엘리베이터 칸 벽의 격자무늬와 버튼판 테두리. 지팡이로 짚으면 칸의 크기와 버튼판 위치가 드러난다.
+func _car_grid(ox: float) -> void:
+	var step := 0.3
+	var r := 0.9
+	for sx in [-1.0, 1.0]:
+		var x: float = ox + sx * 1.145
+		var z := -75.0
+		while z >= -78.3:
+			_segment(Vector3(x, 0.0, z), Vector3(x, 2.4, z), r)
+			z -= step
+		var y := 0.3
+		while y <= 2.4:
+			_segment(Vector3(x, y, -75.0), Vector3(x, y, -78.3), r)
+			y += step
+	var bx := ox - 1.15
+	while bx <= ox + 1.151:
+		_segment(Vector3(bx, 0.0, -78.295), Vector3(bx, 2.4, -78.295), r)
+		bx += step
+	var by := 0.3
+	while by <= 2.4:
+		_segment(Vector3(ox - 1.15, by, -78.295), Vector3(ox + 1.15, by, -78.295), r)
+		by += step
+	# 버튼판: 두꺼운 테두리 + 버튼 줄
+	var px := ox + 1.085
+	for k in 3:
+		var e := 0.02 * k
+		var y0 := 0.75 - e
+		var y1 := 1.45 + e
+		var z0 := -76.17 + e
+		var z1 := -76.53 - e
+		_segment(Vector3(px, y0, z0), Vector3(px, y1, z0), 1.0)
+		_segment(Vector3(px, y0, z1), Vector3(px, y1, z1), 1.0)
+		_segment(Vector3(px, y0, z0), Vector3(px, y0, z1), 1.0)
+		_segment(Vector3(px, y1, z0), Vector3(px, y1, z1), 1.0)
+	for row in 5:
+		var yy := 0.85 + row * 0.13
+		_segment(Vector3(px, yy, -76.22), Vector3(px, yy, -76.48), 1.0)
 
 func _room_door(center: Vector3, on_side_wall: bool, room: int, plate: Vector3) -> void:
 	var size := Vector3(0.06, 2.1, 1.0) if on_side_wall else Vector3(1.0, 2.1, 0.06)
@@ -987,6 +1032,10 @@ func _physics_process(delta: float) -> void:
 
 func _story_checkpoints(noise_distance: float) -> void:
 	var p := player.global_position
+	var now_in_car := _player_in_car()
+	if now_in_car and not was_in_car and not finished:
+		_notify("엘리베이터 안이다. 버튼판은 들어온 문 쪽, 오른쪽 벽에 있다.\n칸 안 어디서든 %s로 손을 뻗어 버튼판을 더듬을 수 있다." % _k("interact"), 6)
+	was_in_car = now_in_car
 	if p.x > 40.0 or tutorial_active:
 		return
 	if _once("gate1", p.z < -13):
@@ -1247,7 +1296,8 @@ func _describe_contact(label: String, prefix: String) -> void:
 		"car": "매끈하고 차가운 철판 — 자동차다! 지금 차도 위에 서 있다.",
 		"signal_pole": "가느다란 금속 기둥, 허리 높이에 상자가 달려 있다. 음향신호기다. (%s: 버튼 누르기)" % _k("interact"),
 		"desk": "높은 탁자 — 안내 데스크. 밤이라 아무도 없다.",
-		"elev_wall": "매끈한 금속 벽. 엘리베이터 안이다. 문 쪽 오른쪽 벽에 버튼판이 있다.",
+		"elev_wall": "매끈한 금속 벽. 엘리베이터 안이다. 문 쪽 오른쪽 벽에 버튼판이 있다. (%s)" % _k("interact"),
+		"elev_panel": "벽에서 살짝 튀어나온 판 — 엘리베이터 버튼판이다. (%s: 손끝으로 더듬기)" % _k("interact"),
 		"elev_door": "가운데가 갈라진 금속 문 — 엘리베이터 문이다. 문 오른쪽 벽에 호출 버튼이 있다.",
 		"room_door": "문이다. 문 옆 명패에 점자가 있을지도 모른다. (%s)" % _k("interact"),
 		"rail": "벽을 따라 이어진 손잡이. 따라가면 복도 끝까지 갈 수 있다.",
@@ -1266,43 +1316,98 @@ func _once_notify(key: String, text: String, duration: float) -> void:
 
 # ================================================================ traffic signal & cars
 
+# 플레이어가 서 있는(또는 건너기 시작한) 쪽의 기둥과 건너편 기둥
+func _my_pole() -> Vector3:
+	return SIGNAL_POLE if road_side > 0 else SIGNAL_FAR
+
+func _other_pole() -> Vector3:
+	return SIGNAL_FAR if road_side > 0 else SIGNAL_POLE
+
 func _signal_process(delta: float) -> void:
 	var p := player.global_position
 	var near_road := p.x < 40.0 and p.z < -38.0 and p.z > -62.0
+	var road_now := near_road and p.z < ROAD_Z0 - 0.05 and p.z > ROAD_Z1 + 0.05 and absf(p.x) < 30.0
+	if not road_now and near_road:
+		road_side = 1 if p.z > (ROAD_Z0 + ROAD_Z1) * 0.5 else -1
+	# 3. 빨간불에 차도에 들어서면: 경적, 차가 멈추고, 건너기 전 자리로 돌아간다.
+	if road_now and not in_road and not ped_green and not red_returning and not helping:
+		_red_light_entry()
+	in_road = road_now
 	sig_clock -= delta
 	if sig_clock <= 0.0:
 		ped_green = not ped_green
 		sig_clock = PED_GREEN if ped_green else PED_RED
 		sig_warned = false
 		if ped_green and near_road:
-			if sig_requested or p.distance_to(SIGNAL_POLE) < 6.0:
+			if sig_requested or p.distance_to(_my_pole()) < 6.0:
 				_say("녹색 신호입니다. 건너가십시오.", 5)
 			sig_requested = false
-		elif not ped_green and near_road and p.z < ROAD_Z0 and p.z > ROAD_Z1:
+		elif not ped_green and road_now:
 			_notify("신호가 바뀌었다! 차들이 출발한다.", 4)
 	if ped_green and not sig_warned and sig_clock < 5.0 and near_road:
 		sig_warned = true
-		if p.distance_to(SIGNAL_POLE) < 6.0 or (p.z < ROAD_Z0 and p.z > ROAD_Z1):
+		if p.distance_to(_my_pole()) < 6.0 or road_now:
 			_say("신호가 곧 바뀝니다.", 3)
-	# 위치 알림음: 기둥을 찾을 수 있도록 일정하게 '딱, 딱'
+	# 위치 알림음: 기둥을 찾을 수 있도록 일정하게 '딱, 딱' (양쪽 기둥 모두)
 	locator_clock += delta
-	if locator_clock > 1.3 and near_road and p.z > -47.5:
+	if locator_clock > 1.3 and near_road and not road_now:
 		locator_clock = 0.0
-		_play_sound(sound_locator, SIGNAL_POLE + Vector3(0,1.2,0), -10, 20)
+		_play_sound(sound_locator, _my_pole() + Vector3(0,1.2,0), -10, 20)
 	# 녹색 동안 건너편 기둥에서 유도음
 	guide_clock += delta
 	if ped_green and near_road and guide_clock > 0.75:
 		guide_clock = 0.0
-		_play_sound(sound_guide, SIGNAL_FAR + Vector3(0,1.4,0), -6, 30)
+		_play_sound(sound_guide, _other_pole() + Vector3(0,1.4,0), -6, 30)
 
 func _press_signal() -> void:
-	_play_sound(sound_click, SIGNAL_POLE + Vector3(0,1.1,0), -6)
+	var p := player.global_position
+	var pole := SIGNAL_POLE if p.distance_to(SIGNAL_POLE) < p.distance_to(SIGNAL_FAR) else SIGNAL_FAR
+	_play_sound(sound_click, pole + Vector3(0,1.1,0), -6)
 	if ped_green:
 		_say("녹색 신호입니다. 남은 시간 %d초. 건너가십시오." % int(sig_clock), 5)
 	else:
 		sig_requested = true
 		_say("빨간 신호입니다. 잠시 기다려 주십시오. 신호가 바뀌면 안내해 드리겠습니다.", 6)
 	_once_notify("arrow", "버튼 상자 윗면의 튀어나온 화살표가 건너는 방향(앞)을 가리킨다.", 4)
+
+# 빨간불 진입: 가장 가까운 차가 급정거하며 경적을 울리고, 잠시 뒤 건너기 전 자리로 돌아간다.
+func _red_light_entry() -> void:
+	red_returning = true
+	helping = true            # 연출이 끝날 때까지 이동·입력을 막는다
+	var p := player.global_position
+	var lane_z := -49.0 if road_side > 0 else -53.0   # 처음 들어서는 차로
+	var horn_at := Vector3(p.x - 5.0, 1.0, lane_z)
+	var best := 99.0
+	for car in cars:
+		var b: AnimatableBody3D = car["body"]
+		var d := b.position.distance_to(p)
+		if d < best:
+			best = d
+			horn_at = b.position + Vector3(0, 1, 0)
+	count_honk += 1
+	_play_sound(sound_horn, horn_at, 2)
+	_play_sound(sound_horn, horn_at, 0)
+	shake = maxf(shake, 0.35)
+	_notify("빠아앙—! 끼이익! 차가 바로 앞에서 급히 멈췄다.\n빨간 신호였다.", 3.5)
+	await _wait(2.6)
+	var tw := create_tween()
+	tw.tween_property(fade, "color:a", 0.85, 0.6)
+	await tw.finished
+	if road_side > 0:
+		player.global_position = Vector3(0.6, 0.05, -46.0)
+		player.rotation.y = 0.0
+	else:
+		player.global_position = Vector3(-0.6, 0.05, -56.0)
+		player.rotation.y = PI
+	player.velocity = Vector3.ZERO
+	in_road = false
+	step_phase = 0.0
+	var tw2 := create_tween()
+	tw2.tween_property(fade, "color:a", 0.0, 0.6)
+	await tw2.finished
+	_notify("놀란 가슴을 진정시키고 횡단보도 앞으로 물러섰다.\n빨간 신호에는 건너지 않는다. 기둥의 버튼(%s)을 누르고 녹색 신호 안내를 기다리자." % _k("interact"), 7)
+	helping = false
+	red_returning = false
 
 func _cars_process(delta: float) -> void:
 	# 차량 신호(= 보행자 빨간불)일 때 양쪽 차로에서 차가 온다.
@@ -1346,7 +1451,7 @@ func _cars_process(delta: float) -> void:
 		var was_moving: bool = car.get("moving", true)
 		car["moving"] = new_front - front_s > 0.001
 		engine.volume_db = -4.0 if car["moving"] else -14.0
-		if honk_now and not car["honked"] and was_moving:
+		if honk_now and not car["honked"] and was_moving and not red_returning:
 			car["honked"] = true
 			count_honk += 1
 			_play_sound(sound_horn, b.position + Vector3(0,1,0), 2)

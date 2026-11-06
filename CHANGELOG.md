@@ -2,7 +2,7 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르고, 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따릅니다.
 
-## [Unreleased]
+## [0.4.0] - 2026-11-06
 
 ### 추가
 - **화재 대피 체험**: 연기로 가득 찬 학교에서 유도등을 따라 대피하는 FireEscape(연기 속 탈출)를 체험 선택 화면에 추가. 본체 파일은 수정 없이 프로젝트 최상위에 복사
@@ -93,6 +93,7 @@
 ### 변경
 - 프로젝트 이름을 임시 이름 `Echo Road(잔향)`에서 `민들레(Dandelion)`로 변경
 
+[0.4.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.0
 [0.3.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.3.1
 [0.3.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.3.0
 [0.2.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.2.1

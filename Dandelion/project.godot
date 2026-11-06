@@ -16,7 +16,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="민들레 — Dandelion"
 config/description="경험해 보지 못한 상황을, 게임으로 체험하다."
-config/version="0.3.1"
+config/version="0.4.0"
 run/main_scene="res://menu/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.086, 0.1, 0.2, 1)

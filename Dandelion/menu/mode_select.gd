@@ -169,6 +169,24 @@ func _draw_preview(c: Control, kind: String) -> void:
 			c.draw_arc(tip, rr, 0, TAU, 40, Color(1, 1, 1, maxf(0.0, 0.5 - tap_phase - r * 0.12)), 1.2, true)
 		c.draw_line(hand, tip, Color(0.75, 0.75, 0.75), 3.0, true)
 		c.draw_circle(tip, 4.0, Color(1, 1, 1, 0.9))
+	elif kind == "fire":
+		# 연기 낀 복도 끝의 유도등과 바닥의 불길 (게임 화면을 닮은 그림)
+		c.draw_rect(Rect2(Vector2.ZERO, s), Color("1b1a1c"))
+		var sign_rect := Rect2(s.x * 0.5 - 34, s.y * 0.3, 68, 26)
+		c.draw_rect(sign_rect.grow(10), Color(0.2, 0.9, 0.45, 0.1))
+		c.draw_rect(sign_rect, Color("2fbf6b"))
+		var arrow := sign_rect.get_center()
+		c.draw_line(arrow + Vector2(-16, 0), arrow + Vector2(16, 0), Color.WHITE, 3.0, true)
+		c.draw_polyline(PackedVector2Array([arrow + Vector2(8, -7), arrow + Vector2(16, 0), arrow + Vector2(8, 7)]), Color.WHITE, 3.0, true)
+		for i in 7:
+			var fx := s.x * (0.08 + i * 0.035)
+			var fh := s.y * (0.26 + 0.1 * sin(t * 5.0 + i * 1.7))
+			var flame := PackedVector2Array([Vector2(fx - 14, s.y), Vector2(fx, s.y - fh), Vector2(fx + 14, s.y)])
+			c.draw_colored_polygon(flame, Color("e8622a") if i % 2 == 0 else Color("f5a23a"))
+		# 천장 쪽에 모이는 연기
+		for i in 9:
+			var drift := fmod(t * 9.0 + i * 47.0, s.x + 80.0) - 40.0
+			c.draw_circle(Vector2(drift, s.y * (0.06 + 0.05 * (i % 3))), 34.0, Color(0.55, 0.53, 0.52, 0.3))
 	else:
 		c.draw_rect(Rect2(Vector2.ZERO, s), Color(UiTheme.PAPER, 0.5))
 		# 점선 테두리

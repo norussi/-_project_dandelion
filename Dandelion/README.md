@@ -3,7 +3,7 @@
 > 경험해 보지 못한 상황을, 게임으로 체험하다
 
 Godot 4.3 이상을 대상으로 작성한 체험형 교육 게임입니다. 메인 메뉴에서 체험을 골라 시작합니다.
-현재 체험은 **모드 1: 시각장애인 보행 체험**(1인칭 3D) 하나이며, 다음 체험은 추후 업데이트로 추가됩니다.
+현재 체험은 **모드 1: 시각장애인 보행 체험**과 **모드 2: 화재 대피 체험**(둘 다 1인칭 3D)입니다.
 외부 에셋, 플러그인, 인터넷 연결이 필요하지 않습니다. Godot 3에서는 열리지 않습니다.
 
 ## 실행
@@ -159,7 +159,7 @@ Godot 4.3 이상을 대상으로 작성한 체험형 교육 게임입니다. 메
 
 ```
 Dandelion/
-├── project.godot              시작 씬: menu/main_menu.tscn, 자동 로드: Settings, Game
+├── project.godot              시작 씬: menu/main_menu.tscn, 자동 로드: Settings, Game, Sfx
 ├── export_presets.cfg         실행 파일 내보내기 설정 (Windows Desktop, Linux → ../build/)
 ├── icon.png / icon.ico        민들레 아이콘 (창·부팅 화면 / Windows 실행 파일)
 ├── core/
@@ -172,9 +172,17 @@ Dandelion/
 │   ├── mode_select.gd         체험 선택 카드
 │   └── settings_menu.gd       설정 화면 (메뉴와 게임 일시정지에서 함께 사용)
 └── stages/
-    └── visual_walk/           모드 1: 시각장애인 보행 체험
-        ├── visual_walk.tscn / .gd
-        └── echo.gdshader
+    ├── visual_walk/           모드 1: 시각장애인 보행 체험
+    │   ├── visual_walk.tscn / .gd
+    │   └── echo.gdshader
+    └── fire_escape/           모드 2: 화재 대피 체험을 연결하는 씬 (일시정지, 메뉴 복귀, 좌클릭)
+        └── fire_escape.tscn / .gd
+
+모드 2 본체 (FireEscape 원본 그대로, 경로가 res:// 바로 아래로 고정되어 있어 이 위치에 둠)
+├── main.tscn, map.tscn        게임 씬과 학교 맵
+├── scripts/                   게임 진행, 플레이어, 효과음 (자동 로드 Sfx)
+├── parts/                     문, 유도등, 불, 연기, 완강기 등 맵 부품
+├── materials/, shaders/       재질과 셰이더
 ```
 
 ## 새 체험 추가하는 법
@@ -184,6 +192,12 @@ Dandelion/
    준비 중인 체험은 `available: false`로 두면 ‘준비 중’ 카드로 보입니다.
 3. 체험 안에서 메인 메뉴로 돌아갈 때는 `Game.goto_main_menu()`, 키 이름이 필요하면 `Settings.key("동작")`, 감도·시야각 등은 `Settings.값`을 씁니다.
 4. 새 키 동작이 필요하면 `core/settings.gd`의 `ACTIONS`에 한 줄을 추가하면 키 설정 화면에도 자동으로 나옵니다.
+
+## 모드 2: 화재 대피
+
+본체는 `res://main.tscn`이고, `stages/fire_escape/fire_escape.gd`가 이를 감싸 일시정지 화면, 메뉴 복귀, 좌클릭 상호작용, 나갈 때 효과음 끄기를 더합니다. 조명을 76개 쓰기 때문에 `project.godot`의 `max_renderable_lights`를 128로 올렸습니다.
+
+마우스 감도, 시야각, 키 설정(상호작용 키와 일시정지 키 제외)은 민들레 설정이 적용되지 않습니다. 조작은 W A S D 이동, C 또는 Ctrl 자세 낮추기, F 또는 우클릭 코와 입 막기, E 또는 좌클릭 상호작용, Esc 일시정지입니다.
 
 ## 수정 포인트 (모드 1: `stages/visual_walk/visual_walk.gd`)
 

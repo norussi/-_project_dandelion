@@ -19,10 +19,10 @@ config/description="경험해 보지 못한 상황을, 게임으로 체험하다
 config/version="0.3.1"
 run/main_scene="res://menu/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
-config/icon="res://icon.png"
 boot_splash/bg_color=Color(0.086, 0.1, 0.2, 1)
-boot_splash/image="res://icon.png"
 boot_splash/stretch_mode=0
+boot_splash/image="res://icon.png"
+config/icon="res://icon.png"
 
 [audio]
 
@@ -32,6 +32,7 @@ general/text_to_speech=true
 
 Settings="*res://core/settings.gd"
 Game="*res://core/game.gd"
+Sfx="*res://scripts/sfx.gd"
 
 [display]
 
@@ -45,4 +46,5 @@ window/stretch/mode="canvas_items"
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+limits/opengl/max_renderable_lights=128
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)

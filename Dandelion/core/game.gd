@@ -19,14 +19,14 @@ const STAGES := [
 		"available": true,
 	},
 	{
-		"id": "coming_soon",
-		"title": "새로운 체험",
-		"subtitle": "준비 중",
-		"description": "추후 업데이트에 추가할 예정입니다.",
-		"tags": ["다음 예정: 재난 상황(화재)"],
-		"scene": "",
-		"preview": "soon",
-		"available": false,
+		"id": "fire_escape",
+		"title": "화재 대피",
+		"subtitle": "연기로 가득 찬 학교에서 탈출",
+		"description": "교실에서 깜빡 잠든 사이 학교에 불이 났습니다. 바로 앞만 겨우 보이는 연기 속에서 자세를 낮추고 코와 입을 막은 채, 유도등을 따라 빠져나갑니다.",
+		"tags": ["1인칭 3D", "재난 상황"],
+		"scene": "res://stages/fire_escape/fire_escape.tscn",
+		"preview": "fire",
+		"available": true,
 	},
 ]
 

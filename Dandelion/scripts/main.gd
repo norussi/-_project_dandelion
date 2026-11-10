@@ -318,6 +318,9 @@ func _start_descent(win: Node3D) -> void:
 	_descent_t = 0.0
 	player.controls_enabled = false
 	player.frozen = true
+	# 내려가는 동안에는 두 손이 로프와 벽을 짚어야 하므로 코와 입을 막던 손을 뗀다.
+	# (frozen이면 플레이어가 covering을 다시 계산하지 않아 막은 상태가 그대로 남았다)
+	player.covering = false
 	_prompt.text = ""
 	_objective.text = ""
 	var wp: Vector3 = win.global_position   # 창문 안쪽 벽면, 바닥 높이

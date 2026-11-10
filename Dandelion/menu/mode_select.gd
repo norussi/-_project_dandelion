@@ -105,6 +105,8 @@ func _card(stage: Dictionary) -> Control:
 	desc.text = stage["description"]
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.custom_minimum_size = Vector2(346, 80)
+	# 카드마다 설명 줄 수가 달라도 태그와 시작하기 버튼이 같은 높이에 오도록 남는 공간을 설명이 채운다
+	desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	desc.add_theme_color_override("font_color", UiTheme.INK if ok else UiTheme.MUTED)
 	desc.add_theme_font_size_override("font_size", Settings.font_size(16))
 	col.add_child(desc)

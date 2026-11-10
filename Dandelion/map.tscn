@@ -25,6 +25,7 @@
 [ext_resource type="Material" path="res://materials/ground.tres" id="26_ground"]
 [ext_resource type="Material" path="res://materials/outer_wall.tres" id="27_outer"]
 [ext_resource type="Material" path="res://materials/leaf.tres" id="28_leaf"]
+[ext_resource type="Script" path="res://parts/floor_sign.gd" id="29_floorsign"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_ramp"]
 size = Vector3(3.6, 0.1, 2.2)
@@ -5560,3 +5561,45 @@ material = ExtResource("4_bssq0")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 34, 5.3, 26)
 mesh = SubResource("Sphere_lamp")
 surface_material_override/0 = ExtResource("25_lit")
+
+[node name="FloorSigns" type="Node3D" parent="Stairwell"]
+
+[node name="FloorSign_1N" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 1.55, 11.5)
+script = ExtResource("29_floorsign")
+floor_number = 1
+
+[node name="FloorSign_1S" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 1.55, 7.5)
+script = ExtResource("29_floorsign")
+floor_number = 1
+
+[node name="FloorSign_2N" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 5.15, 11.5)
+script = ExtResource("29_floorsign")
+floor_number = 2
+
+[node name="FloorSign_2S" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 5.15, 7.5)
+script = ExtResource("29_floorsign")
+floor_number = 2
+
+[node name="FloorSign_3N" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 8.75, 11.5)
+script = ExtResource("29_floorsign")
+floor_number = 3
+
+[node name="FloorSign_3S" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 8.75, 7.5)
+script = ExtResource("29_floorsign")
+floor_number = 3
+
+[node name="FloorSign_4N" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 12.35, 11.5)
+script = ExtResource("29_floorsign")
+floor_number = 4
+
+[node name="FloorSign_4S" type="Node3D" parent="Stairwell/FloorSigns"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 12.35, 7.5)
+script = ExtResource("29_floorsign")
+floor_number = 4

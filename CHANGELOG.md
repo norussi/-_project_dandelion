@@ -2,6 +2,19 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르고, 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.4.2] - 2026-11-10
+
+### 변경
+- **완강기 하강 3인칭 연출 다듬기** (`scripts/descent_view.gd`)
+  - 사람 모형: 상자와 캡슐을 이어 붙인 모형 대신, 관절(구)과 끝이 가늘어지는 원통으로 이은 매끈한 모형. 가슴 벨트는 몸통을 감싼 고리로, 로프는 가슴 앞 고리에 연결
+  - 동작: 창가로 걸어옴 → 창틀에 걸터앉음 → 벽 쪽으로 돌아 매달림 → 두 발로 벽을 번갈아 디디며 하강 → 무릎으로 충격을 받으며 착지. 손발 위치를 먼저 정하고 무릎·팔꿈치를 계산해(2관절 IK) 발이 벽에서 미끄러지지 않음
+  - 카메라를 더 가까이 두고 부드럽게 따라가도록 변경, 밤에도 사람이 묻히지 않게 은은한 보조 조명 추가
+  - 창틀을 넘는 시간을 1.6초 → 3.2초로 늘림 (`scripts/main.gd`가 연출의 시간 상수를 사용)
+- Windows 실행 파일 버전 정보를 0.4.2.0으로 변경
+
+### 수정
+- 숨이 차서 흐려진 시야(흐림·좁아진 시야·열기 색)가 완강기 하강 연출과 대피 성공 화면에서도 그대로 남던 문제. 하강이 시작되면 1초 남짓에 걸쳐 원래 시야로 돌아옴 (`scripts/main.gd`)
+
 ## [0.4.1] - 2026-11-10
 
 ### 추가
@@ -111,6 +124,7 @@
 ### 변경
 - 프로젝트 이름을 임시 이름 `Echo Road(잔향)`에서 `민들레(Dandelion)`로 변경
 
+[0.4.2]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.2
 [0.4.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.1
 [0.4.0]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.0
 [0.3.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.3.1

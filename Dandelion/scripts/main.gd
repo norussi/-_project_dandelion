@@ -15,6 +15,7 @@ var _smoke_color := Color(0.13, 0.12, 0.11)
 var _heat := 0.0
 var _cough_timer := 3.0
 var _blur_pulse := 0.0
+var _view_clear := 0.0         # 1 = 하강 연출 중 시야 효과(흐림·비네트·열기)를 끈 상태
 var _alarm_on := false
 
 # 기록 (엔딩 평가용)
@@ -220,9 +221,13 @@ func _hint(id: String, text: String, dur: float) -> void:
 func _update_fx(delta: float) -> void:
 	_blur_pulse = maxf(0.0, _blur_pulse - delta * 0.8)
 	var choke := 1.0 - breath / 100.0
-	_fx.set_shader_parameter("blur", clampf(_density * 0.25 + choke * 0.6 + _blur_pulse, 0.0, 1.0))
-	_fx.set_shader_parameter("vignette", clampf(0.2 + choke * 0.8, 0.0, 1.0))
-	_fx.set_shader_parameter("tint", Color(1.0, 0.35, 0.05, _heat * 0.6))
+	# 완강기 하강 연출이 시작되면(창밖 맑은 공기) 숨이 차서 흐려진 시야가 천천히 원래대로 돌아온다
+	var want_clear := 1.0 if _state in ["descending", "escaped"] else 0.0
+	_view_clear = move_toward(_view_clear, want_clear, delta / 1.2)
+	var dim := 1.0 - smoothstep(0.0, 1.0, _view_clear)
+	_fx.set_shader_parameter("blur", clampf(_density * 0.25 + choke * 0.6 + _blur_pulse, 0.0, 1.0) * dim)
+	_fx.set_shader_parameter("vignette", lerpf(0.2, clampf(0.2 + choke * 0.8, 0.0, 1.0), dim))
+	_fx.set_shader_parameter("tint", Color(1.0, 0.35, 0.05, _heat * 0.6 * dim))
 	# 소매 (코와 입 막기)
 	var target := -150.0 if player.covering else 40.0
 	_sleeve.offset_top = lerpf(_sleeve.offset_top, target, clampf(delta * 10.0, 0.0, 1.0))
@@ -326,16 +331,19 @@ func _start_descent(win: Node3D) -> void:
 	_objective.text = ""
 	var wp: Vector3 = win.global_position   # 창문 안쪽 벽면, 바닥 높이
 	var ground_y := -1.85
-	_show_message("창틀에 걸터앉아 몸을 밖으로 내민다…\n두 손으로 로프를 잡지 말고, 벽을 발로 밀며 내려가자.", 4.5)
+	_show_message("창틀에 걸터앉아 몸을 밖으로 내민다…\n두 손으로 로프를 잡지 말고, 벽을 발로 밀며 내려가자.", 4.8)
 	# 건물 밖 3인칭 카메라로 바꿔, 아래의 트윈으로 움직이는 플레이어 위치에 사람 모형을 보여 준다
 	_descent_view = preload("res://scripts/descent_view.gd").new()
 	add_child(_descent_view)
 	_descent_view.begin(player, win)
 	var tw := create_tween()
-	tw.tween_property(player, "global_position", Vector3(wp.x, wp.y, wp.z - 0.35), 1.2).set_trans(Tween.TRANS_SINE)
-	tw.parallel().tween_property(player, "rotation:y", player.rotation.y + angle_difference(player.rotation.y, PI), 1.2)
-	tw.parallel().tween_property(player.camera, "rotation:x", -0.3, 1.2)
-	tw.tween_property(player, "global_position", Vector3(wp.x, wp.y, wp.z + 0.9), 1.6).set_trans(Tween.TRANS_SINE)
+	# 걸어오는 시간과 창틀을 넘는 시간은 3인칭 연출(descent_view.gd)의 동작 길이에 맞춘다
+	var t_in: float = _descent_view.APPROACH_TIME
+	var t_out: float = _descent_view.EXIT_TIME
+	tw.tween_property(player, "global_position", Vector3(wp.x, wp.y, wp.z - 0.35), t_in).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(player, "rotation:y", player.rotation.y + angle_difference(player.rotation.y, PI), t_in)
+	tw.parallel().tween_property(player.camera, "rotation:x", -0.3, t_in)
+	tw.tween_property(player, "global_position", Vector3(wp.x, wp.y, wp.z + 0.9), t_out).set_trans(Tween.TRANS_SINE)
 	tw.tween_callback(func() -> void: _show_message("로프가 풀리며 천천히 내려간다.\n속도는 일정하다. 침착하게…", 4.0))
 	tw.tween_property(player, "global_position:y", ground_y + 0.05, 12.0)
 	tw.parallel().tween_property(player, "global_position:z", wp.z + 1.4, 12.0)

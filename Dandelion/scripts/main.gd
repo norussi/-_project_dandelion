@@ -31,6 +31,7 @@ var _f1_reached := false      # 1층까지 내려가 출구가 막힌 것을 확
 var _desc_log := {}           # 완강기 사용 단계 기록
 var _outside := false
 var _descent_t := 0.0
+var _descent_view: Node3D      # 완강기 하강 3인칭 연출 (scripts/descent_view.gd)
 var _objective: Label
 
 # HUD
@@ -102,8 +103,8 @@ func _update_smoke(delta: float) -> void:
 			best = z
 	var target_density: float = best.density if best else DEFAULT_DENSITY
 	var target_color: Color = best.smoke_color if best else Color(0.13, 0.12, 0.11)
-	# 건물 밖(창밖)은 맑은 밤공기
-	_outside = player.global_position.z > 11.4 and player.global_position.x > -13.9
+	# 건물 밖(창밖)은 맑은 밤공기. 완강기 하강 중에는 바깥 카메라로 보므로 처음부터 바깥 공기로 본다.
+	_outside = (player.global_position.z > 11.4 and player.global_position.x > -13.9) or _state == "descending"
 	if _outside:
 		target_density = 0.02
 		target_color = Color(0.1, 0.12, 0.17)
@@ -326,6 +327,10 @@ func _start_descent(win: Node3D) -> void:
 	var wp: Vector3 = win.global_position   # 창문 안쪽 벽면, 바닥 높이
 	var ground_y := -1.85
 	_show_message("창틀에 걸터앉아 몸을 밖으로 내민다…\n두 손으로 로프를 잡지 말고, 벽을 발로 밀며 내려가자.", 4.5)
+	# 건물 밖 3인칭 카메라로 바꿔, 아래의 트윈으로 움직이는 플레이어 위치에 사람 모형을 보여 준다
+	_descent_view = preload("res://scripts/descent_view.gd").new()
+	add_child(_descent_view)
+	_descent_view.begin(player, win)
 	var tw := create_tween()
 	tw.tween_property(player, "global_position", Vector3(wp.x, wp.y, wp.z - 0.35), 1.2).set_trans(Tween.TRANS_SINE)
 	tw.parallel().tween_property(player, "rotation:y", player.rotation.y + angle_difference(player.rotation.y, PI), 1.2)
@@ -341,6 +346,8 @@ func _start_descent(win: Node3D) -> void:
 func _finish_descent() -> void:
 	player.camera.rotation.z = 0.0
 	player.camera.rotation.x = -0.1
+	if _descent_view:
+		_descent_view.land()
 	_show_message("무사히 지상에 도착했다! 벨트를 풀고 건물에서 멀리 떨어지자.", 3.0)
 	await get_tree().create_timer(1.5).timeout
 	_state = "play"

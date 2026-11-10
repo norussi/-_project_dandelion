@@ -4,7 +4,14 @@ extends Control
 
 signal closed
 
+const LISTEN_HELP := "바꿀 동작의 버튼을 누른 뒤 새 키나 마우스 버튼을 누르세요. 같은 체험에서 이미 쓰고 있는 키를 고르면 두 동작의 키가 서로 바뀝니다. Esc로 취소합니다.\n‘공통’ 표시가 있는 동작은 두 체험이 함께 쓰므로, 한쪽에서 바꾸면 다른 쪽도 같이 바뀝니다."
+
+## 키 설정 탭에서 처음 보여 줄 체험 (Settings.KEY_STAGES의 id). 게임 안에서 열 때 그 체험으로 맞춘다.
+var key_stage := "visual_walk"
+
 var tabs: TabContainer
+var key_list: VBoxContainer
+var key_stage_buttons := {}    # stage id -> Button
 var key_buttons := {}          # action -> Button
 var listening := ""            # 지금 새 입력을 기다리는 동작
 var listen_hint: Label
@@ -143,6 +150,30 @@ func _slider(parent: Control, key: String, label: String, lo: float, hi: float, 
 	_row(parent, label, box, hint)
 
 
+## 탭 안의 묶음 제목. 공통 설정과 체험 전용 설정을 나눈다.
+func _section(parent: Control, text: String, hint := "") -> void:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	parent.add_child(box)
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_override("font", UiTheme.bold_font())
+	l.add_theme_font_size_override("font_size", Settings.font_size(18))
+	l.add_theme_color_override("font_color", UiTheme.BROWN)
+	box.add_child(l)
+	if hint != "":
+		var h := Label.new()
+		h.text = hint
+		h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		h.add_theme_color_override("font_color", UiTheme.TAN)
+		h.add_theme_font_size_override("font_size", Settings.font_size(14))
+		box.add_child(h)
+	var line := ColorRect.new()
+	line.color = Color(UiTheme.BROWN, 0.15)
+	line.custom_minimum_size.y = 1
+	box.add_child(line)
+
+
 func _check(parent: Control, key: String, label: String, hint := "") -> void:
 	var c := CheckButton.new()
 	c.button_pressed = bool(Settings.get_value(key))
@@ -155,12 +186,14 @@ func _check(parent: Control, key: String, label: String, hint := "") -> void:
 
 func _build_control_tab() -> void:
 	var p := _page("조작")
+	_section(p, "공통", "모든 체험에 함께 적용됩니다.")
 	_slider(p, "mouse_sensitivity", "마우스 감도", 0.2, 3.0, 0.05, func(v): return "×%.2f" % v,
-		"몸을 돌리고 고개를 숙이는 속도입니다.")
-	_check(p, "auto_sweep", "걸을 때 지팡이 자동으로 짚기", "걸음에 맞춰 지팡이가 좌우를 번갈아 짚습니다(이점 촉타법). 끄면 클릭으로만 짚습니다.")
-	_check(p, "invert_y", "마우스 상하 반전", "마우스를 위로 올리면 고개를 숙입니다.")
+		"마우스로 몸을 돌리고 위아래를 보는 속도입니다.")
+	_check(p, "invert_y", "마우스 상하 반전", "마우스를 위로 올리면 아래를 봅니다.")
 	_slider(p, "fov", "시야각", 60.0, 100.0, 1.0, func(v): return "%d°" % int(v),
 		"넓을수록 화면에 더 많이 보이지만 멀미가 날 수 있습니다.")
+	_section(p, "시각장애 보행")
+	_check(p, "auto_sweep", "걸을 때 지팡이 자동으로 짚기", "걸음에 맞춰 지팡이가 좌우를 번갈아 짚습니다(이점 촉타법). 끄면 클릭으로만 짚습니다.")
 	_check(p, "show_aim", "조준점 표시", "지팡이로 짚을 곳을 가리키는 화면 가운데 + 표시입니다.")
 
 
@@ -170,28 +203,80 @@ func _build_keys_tab() -> void:
 	listen_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	listen_hint.add_theme_color_override("font_color", UiTheme.MUTED)
 	listen_hint.add_theme_font_size_override("font_size", Settings.font_size(14))
-	listen_hint.text = "바꿀 동작의 버튼을 누른 뒤 새 키나 마우스 버튼을 누르세요. 이미 쓰고 있는 키를 고르면 두 동작의 키가 서로 바뀝니다. Esc로 취소합니다."
+	listen_hint.text = LISTEN_HELP
 	p.add_child(listen_hint)
-	for a in Settings.ACTIONS:
+
+	# 체험 고르기: [시각장애 보행] [화재 대피]
+	var switch := HBoxContainer.new()
+	switch.add_theme_constant_override("separation", 8)
+	p.add_child(switch)
+	var group := ButtonGroup.new()
+	key_stage_buttons.clear()
+	for s in Settings.KEY_STAGES:
+		var id: String = s[0]
+		var b := Button.new()
+		b.text = s[1]
+		b.toggle_mode = true
+		b.button_group = group
+		b.custom_minimum_size = Vector2(170, 42)
+		b.pressed.connect(_show_key_stage.bind(id))
+		key_stage_buttons[id] = b
+		switch.add_child(b)
+
+	key_list = VBoxContainer.new()
+	key_list.add_theme_constant_override("separation", 14)
+	p.add_child(key_list)
+	_show_key_stage(key_stage)
+
+
+func _show_key_stage(stage: String) -> void:
+	_stop_listen()
+	if not key_stage_buttons.has(stage):
+		stage = Settings.KEY_STAGES[0][0]
+	key_stage = stage
+	listen_hint.text = LISTEN_HELP
+	listen_hint.add_theme_color_override("font_color", UiTheme.MUTED)
+	# set_pressed_no_signal은 같은 그룹의 다른 버튼을 풀어 주지 않으므로 직접 맞춘다
+	for id in key_stage_buttons:
+		key_stage_buttons[id].set_pressed_no_signal(id == stage)
+	for c in key_list.get_children():
+		c.queue_free()
+	key_buttons.clear()
+	for a in Settings.actions_for_stage(stage):
 		var action: String = a[0]
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(230, 40)
 		b.text = Settings.label_for_code(Settings.bindings[action])
 		b.pressed.connect(_start_listen.bind(action))
 		key_buttons[action] = b
-		_row(p, a[1], b)
+		var label := Settings.action_label(action, stage)
+		if Settings.is_shared_action(action):
+			label += "   · 공통"
+		_row(key_list, label, b)
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.add_theme_color_override("font_color", UiTheme.MUTED)
 	note.add_theme_font_size_override("font_size", Settings.font_size(14))
-	note.text = "손으로 더듬기 화면에서 버튼을 누르는 것은 마우스 왼쪽 클릭으로 고정입니다."
-	p.add_child(note)
+	if stage == "fire_escape":
+		note.text = "좌클릭(상호작용), 우클릭(코와 입 막기), 엔딩 화면의 R(다시 하기)은 고정입니다."
+	else:
+		note.text = "손으로 더듬기 화면에서 버튼을 누르는 것은 마우스 왼쪽 클릭으로 고정입니다."
+	key_list.add_child(note)
+
+
+func _stage_name(id: String) -> String:
+	for s in Settings.KEY_STAGES:
+		if s[0] == id:
+			return s[1]
+	return id
 
 
 func _build_sound_tab() -> void:
 	var p := _page("소리")
+	_section(p, "공통", "모든 체험에 함께 적용됩니다.")
 	_slider(p, "master_volume", "전체 음량", 0.0, 100.0, 1.0, func(v): return "%d%%" % int(v),
-		"지팡이 소리, 발소리, 차 소리, 안내음 등 게임 소리 전체입니다.")
+		"발소리, 안내음, 경보음 등 게임 소리 전체입니다.")
+	_section(p, "시각장애 보행")
 	_check(p, "tts_enabled", "음성 안내 읽어 주기", "휴대폰 안내, 음향신호기, 엘리베이터 안내를 컴퓨터 음성으로 읽습니다. 자막은 항상 나옵니다.")
 	_slider(p, "tts_volume", "음성 안내 음량", 0.0, 100.0, 1.0, func(v): return "%d%%" % int(v))
 	_slider(p, "tts_rate", "음성 안내 속도", 0.5, 2.0, 0.05, func(v): return "×%.2f" % v)
@@ -207,6 +292,7 @@ func _build_sound_tab() -> void:
 
 func _build_display_tab() -> void:
 	var p := _page("화면 · 접근성")
+	_section(p, "공통", "모든 체험에 함께 적용됩니다.")
 	_check(p, "fullscreen", "전체 화면")
 	_text_option = OptionButton.new()
 	_text_option.custom_minimum_size.x = 230
@@ -218,8 +304,8 @@ func _build_display_tab() -> void:
 		if not _suppress:
 			Settings.set_value("text_scale", _text_option.get_item_metadata(i))
 			_rebuild())
-	_row(p, "글자 크기", _text_option, "안내 문구, 도움말, 메뉴 글자 크기입니다.")
-	_check(p, "screen_effects", "화면 흔들림 · 번쩍임", "부딪히거나 지팡이가 걸릴 때 화면이 흔들리고, 머리를 부딪히면 하얗게 번쩍입니다. 빛이나 움직임에 민감하다면 끄세요.")
+	_row(p, "글자 크기", _text_option, "메뉴, 설정, 일시정지 화면과 시각장애 보행의 안내 문구 크기입니다. 화재 대피의 게임 화면 글자에는 아직 적용되지 않습니다.")
+	_check(p, "screen_effects", "화면 흔들림 · 번쩍임", "부딪히거나 기침할 때 화면이 흔들리고, 시각장애 보행에서 머리를 부딪히면 하얗게 번쩍입니다. 빛이나 움직임에 민감하다면 끄세요.")
 
 
 func _select_text_scale() -> void:
@@ -259,7 +345,15 @@ func _input(event: InputEvent) -> void:
 		if code != "":
 			var action := listening
 			listening = ""
-			Settings.set_binding(action, code)
+			var clash := Settings.set_binding(action, code)
+			if clash != "":
+				var where: Array = Settings.action_stages(clash).map(func(s): return _stage_name(s))
+				listen_hint.text = "그 키로 바꾸면 %s에서 ‘%s’와 키가 겹치게 됩니다. 다른 키를 고르거나, 겹치는 동작의 키를 먼저 바꾸세요." % [
+					", ".join(where), Settings.action_label(clash)]
+				listen_hint.add_theme_color_override("font_color", Color("b03a2e"))
+			else:
+				listen_hint.text = LISTEN_HELP
+				listen_hint.add_theme_color_override("font_color", UiTheme.MUTED)
 			_refresh_keys()
 			key_buttons[action].call_deferred("grab_focus")
 			get_viewport().set_input_as_handled()

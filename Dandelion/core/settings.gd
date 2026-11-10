@@ -6,22 +6,50 @@ signal changed
 
 const PATH := "user://settings.cfg"
 
-## 키 설정 화면에 나오는 순서. [액션 이름, 표시 이름, 기본 입력]
-## 기본 입력: "key:<physical keycode>" 또는 "mouse:<button index>"
-const ACTIONS := [
-	["forward", "앞으로 걷기", "key:%d" % KEY_W],
-	["back", "뒤로 걷기", "key:%d" % KEY_S],
-	["left", "왼쪽 옆걸음", "key:%d" % KEY_A],
-	["right", "오른쪽 옆걸음", "key:%d" % KEY_D],
-	["sprint", "서두르기", "key:%d" % KEY_SHIFT],
-	["crouch", "웅크리기 (누르고 있기)", "key:%d" % KEY_CTRL],
-	["cane_tap", "바라보는 곳 짚기", "mouse:%d" % MOUSE_BUTTON_LEFT],
-	["tap", "발 앞 짚기", "key:%d" % KEY_SPACE],
-	["interact", "손으로 더듬기", "key:%d" % KEY_E],
-	["phone", "휴대폰 음성 안내", "key:%d" % KEY_Q],
-	["pause_game", "일시정지 · 도움말", "key:%d" % KEY_ESCAPE],
-	["restart_game", "처음부터 다시 (일시정지 중)", "key:%d" % KEY_R],
+## 키 설정 화면에서 나누어 보여 주는 체험. [id, 표시 이름]
+const KEY_STAGES := [
+	["visual_walk", "시각장애 보행"],
+	["fire_escape", "화재 대피"],
 ]
+
+## 키 설정 화면에 나오는 순서. [액션 이름, 표시 이름, 기본 입력, 쓰는 체험, (체험별 표시 이름)]
+## 기본 입력: "key:<physical keycode>" 또는 "mouse:<button index>"
+## 두 체험이 함께 쓰는 동작은 키가 하나라서, 한쪽에서 바꾸면 다른 쪽도 같이 바뀐다.
+const ACTIONS := [
+	# 공통
+	["forward", "앞으로 이동", "key:%d" % KEY_W, ["visual_walk", "fire_escape"]],
+	["back", "뒤로 이동", "key:%d" % KEY_S, ["visual_walk", "fire_escape"]],
+	["left", "왼쪽으로 이동", "key:%d" % KEY_A, ["visual_walk", "fire_escape"]],
+	["right", "오른쪽으로 이동", "key:%d" % KEY_D, ["visual_walk", "fire_escape"]],
+	["crouch", "몸 낮추기 (누르고 있기)", "key:%d" % KEY_CTRL, ["visual_walk", "fire_escape"],
+		{"visual_walk": "웅크리기 (누르고 있기)", "fire_escape": "자세 낮추기 (누르고 있기)"}],
+	["interact", "상호작용", "key:%d" % KEY_E, ["visual_walk", "fire_escape"],
+		{"visual_walk": "손으로 더듬기", "fire_escape": "문 손잡이 확인·열기, 비상벨 누르기"}],
+	["pause_game", "일시정지", "key:%d" % KEY_ESCAPE, ["visual_walk", "fire_escape"],
+		{"visual_walk": "일시정지 · 도움말"}],
+	# 시각장애 보행
+	["sprint", "서두르기", "key:%d" % KEY_SHIFT, ["visual_walk"]],
+	["cane_tap", "바라보는 곳 짚기", "mouse:%d" % MOUSE_BUTTON_LEFT, ["visual_walk"]],
+	["tap", "발 앞 짚기", "key:%d" % KEY_SPACE, ["visual_walk"]],
+	["phone", "휴대폰 음성 안내", "key:%d" % KEY_Q, ["visual_walk"]],
+	["restart_game", "처음부터 다시 (일시정지 중)", "key:%d" % KEY_R, ["visual_walk"]],
+	# 화재 대피
+	["crouch_toggle", "자세 낮추기 켜고 끄기", "key:%d" % KEY_C, ["fire_escape"]],
+	["cover", "코와 입 막기 (누르고 있기)", "key:%d" % KEY_F, ["fire_escape"]],
+	["turn_left", "왼쪽으로 돌기", "key:%d" % KEY_LEFT, ["fire_escape"]],
+	["turn_right", "오른쪽으로 돌기", "key:%d" % KEY_RIGHT, ["fire_escape"]],
+]
+
+## 화재 대피 본체(FireEscape)는 이동과 자세 낮추기에 다른 액션 이름을 쓴다.
+## 같은 키를 이 이름으로도 등록해서 공통 키 설정이 그대로 적용되게 한다.
+## (본체는 액션이 이미 있으면 자기 기본 키를 등록하지 않는다)
+const ACTION_ALIASES := {
+	"move_forward": "forward",
+	"move_back": "back",
+	"move_left": "left",
+	"move_right": "right",
+	"crouch_hold": "crouch",
+}
 
 const DEFAULTS := {
 	"mouse_sensitivity": 1.0,   # 배율. 실제 값 = 0.0022 × 배율
@@ -87,16 +115,29 @@ func set_value(key: String, value) -> void:
 	changed.emit()
 
 
-func set_binding(action: String, code: String) -> void:
-	# 같은 입력을 쓰던 다른 동작과는 서로 맞바꾼다.
+## 키를 바꾼다. 같은 체험에서 같은 입력을 쓰던 다른 동작과는 서로 맞바꾼다.
+## 서로 다른 체험에서만 쓰는 동작끼리는 같은 키를 써도 된다.
+## 맞바꾸면 그 동작이 쓰이는 다른 체험에서 키가 겹치게 될 때는 바꾸지 않고
+## 겹치는 동작 이름을 돌려준다. 바꾸었으면 "".
+func set_binding(action: String, code: String) -> String:
 	var old: String = bindings.get(action, "")
+	if code == old:
+		return ""
+	var swaps := []
 	for other in bindings:
-		if other != action and bindings[other] == code:
-			bindings[other] = old
+		if other != action and bindings[other] == code and _share_stage(action, other):
+			swaps.append(other)
+	for other in swaps:
+		for third in bindings:
+			if third != action and third != other and bindings[third] == old and _share_stage(other, third):
+				return third
+	for other in swaps:
+		bindings[other] = old
 	bindings[action] = code
 	_apply_inputs()
 	save_settings()
 	changed.emit()
+	return ""
 
 
 func reset_all() -> void:
@@ -133,6 +174,52 @@ func _apply_inputs() -> void:
 		var ev := event_from_code(bindings.get(action, a[2]))
 		if ev:
 			InputMap.action_add_event(action, ev)
+	for alias in ACTION_ALIASES:
+		if not InputMap.has_action(alias):
+			InputMap.add_action(alias)
+		InputMap.action_erase_events(alias)
+		for ev in InputMap.action_get_events(ACTION_ALIASES[alias]):
+			InputMap.action_add_event(alias, ev.duplicate())
+
+
+# ---------------------------------------------------------------- 키 설정 목록
+
+static func find_action(action: String) -> Array:
+	for a in ACTIONS:
+		if a[0] == action:
+			return a
+	return []
+
+
+static func action_stages(action: String) -> Array:
+	var a := find_action(action)
+	return a[3] if a.size() > 3 else []
+
+
+## 여러 체험이 함께 쓰는 동작인지
+static func is_shared_action(action: String) -> bool:
+	return action_stages(action).size() > 1
+
+
+## 키 설정 화면에 보여 줄 이름. 체험별 이름이 있으면 그것을 쓴다.
+static func action_label(action: String, stage := "") -> String:
+	var a := find_action(action)
+	if a.is_empty():
+		return action
+	if a.size() > 4 and stage != "" and a[4].has(stage):
+		return a[4][stage]
+	return a[1]
+
+
+static func actions_for_stage(stage: String) -> Array:
+	return ACTIONS.filter(func(a): return stage in a[3])
+
+
+static func _share_stage(a: String, b: String) -> bool:
+	for s in action_stages(a):
+		if s in action_stages(b):
+			return true
+	return false
 
 
 static func event_from_code(code: String) -> InputEvent:
@@ -177,6 +264,10 @@ static func label_for_code(code: String) -> String:
 	match name:
 		"Escape": return "Esc"
 		"Space": return "Space"
+		"Left": return "←"
+		"Right": return "→"
+		"Up": return "↑"
+		"Down": return "↓"
 		"": return "키 %s" % parts[1]
 	return name
 

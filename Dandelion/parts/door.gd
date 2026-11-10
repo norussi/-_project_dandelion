@@ -2,7 +2,7 @@
 class_name SchoolDoor
 extends StaticBody3D
 ## 문. 종류에 따라 E 키를 눌렀을 때 반응이 다르다.
-##  - EXIT     : 비상구(계단) 문. 손잡이를 확인하고 열 수 있다.
+##  - EXIT     : 비상구(계단) 문. 처음 E로 손잡이가 뜨거운지 확인하고, 다시 E로 연다.
 ##  - HOT      : 너머에 불이 난 문. 손잡이가 뜨겁다 → 열지 말아야 함.
 ##  - LOCKED   : 잠긴 문 (교실, 교무실 등)
 ##  - ELEVATOR : 엘리베이터. 화재 때는 타면 안 된다.
@@ -25,6 +25,8 @@ enum Kind { EXIT, HOT, LOCKED, ELEVATOR }
 		_rebuild()
 
 var is_open := false
+## 손등으로 손잡이를 확인했는지 (EXIT 문은 확인한 뒤에야 열 수 있다)
+var is_checked := false
 var _hinge: Node3D
 var _shape: CollisionShape3D
 
@@ -36,7 +38,9 @@ func _ready() -> void:
 func get_prompt() -> String:
 	match kind:
 		Kind.EXIT:
-			return "" if is_open else "E  손잡이를 확인하고 문 열기"
+			if is_open:
+				return ""
+			return "E  문 열기" if is_checked else "E  손등으로 손잡이 만져보기"
 		Kind.HOT:
 			return "E  손등으로 손잡이 만져보기"
 		Kind.ELEVATOR:
@@ -51,8 +55,11 @@ func interact() -> Dictionary:
 		Kind.EXIT:
 			if is_open:
 				return {}
+			if not is_checked:
+				is_checked = true
+				return {"msg": "손등으로 손잡이를 만져봤다. 뜨겁지 않다.\n문 너머에 불은 없는 것 같다. 이제 문을 열자.", "event": "exit_checked"}
 			open()
-			return {"msg": "손등으로 손잡이를 만져봤다. 뜨겁지 않다.\n문을 연다!", "event": "exit_opened"}
+			return {"msg": "문을 천천히 연다!", "event": "exit_opened"}
 		Kind.HOT:
 			return {"msg": "앗, 뜨겁다! 문 너머에 불이 있다.\n이 문은 열지 말고 다른 길로 가자.", "event": "hot_checked"}
 		Kind.ELEVATOR:

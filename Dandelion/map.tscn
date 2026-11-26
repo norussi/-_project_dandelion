@@ -26,6 +26,7 @@
 [ext_resource type="Material" path="res://materials/outer_wall.tres" id="27_outer"]
 [ext_resource type="Material" path="res://materials/leaf.tres" id="28_leaf"]
 [ext_resource type="Script" path="res://parts/floor_sign.gd" id="29_floorsign"]
+[ext_resource type="Script" path="res://parts/stair_guide_light.gd" id="30_stairguide"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_ramp"]
 size = Vector3(3.6, 0.1, 2.2)
@@ -5603,3 +5604,29 @@ floor_number = 4
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -14.1, 12.35, 7.5)
 script = ExtResource("29_floorsign")
 floor_number = 4
+
+[node name="StairGuideLights" type="Node3D" parent="Stairwell"]
+
+[node name="StairGuide_1" type="Node3D" parent="Stairwell/StairGuideLights"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -19.87, -0.9, 8.0)
+script = ExtResource("30_stairguide")
+upper_floor = 1
+lower_floor = 0
+
+[node name="StairGuide_2" type="Node3D" parent="Stairwell/StairGuideLights"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -19.87, 2.7, 9.5)
+script = ExtResource("30_stairguide")
+upper_floor = 2
+lower_floor = 1
+
+[node name="StairGuide_3" type="Node3D" parent="Stairwell/StairGuideLights"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -19.87, 6.3, 9.5)
+script = ExtResource("30_stairguide")
+upper_floor = 3
+lower_floor = 2
+
+[node name="StairGuide_4" type="Node3D" parent="Stairwell/StairGuideLights"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -19.87, 9.9, 9.5)
+script = ExtResource("30_stairguide")
+upper_floor = 4
+lower_floor = 3

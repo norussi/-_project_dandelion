@@ -1,9 +1,11 @@
 extends Control
-## 메인 메뉴: 길가에 핀 민들레 배경 + 플레이 / 설정 / 종료, 오른쪽 아래 GitHub 바로가기.
+## 메인 메뉴: 길가에 핀 민들레 배경 + 플레이 / 설정 / 종료, 오른쪽 아래 Godot 마크와 GitHub 바로가기.
 
 const RoadsideScene := preload("res://menu/roadside_scene.gd")
 const ModeSelect := preload("res://menu/mode_select.gd")
 const SettingsMenu := preload("res://menu/settings_menu.gd")
+const GODOT_ICON := preload("res://menu/godot/godot_icon.png")   # Godot 로고 (CC BY 4.0, menu/godot/ATTRIBUTION.md)
+const GODOT_URL := "https://godotengine.org"
 
 var scene_bg: Control
 var home: Control
@@ -110,6 +112,47 @@ func _build_ui() -> void:
 	gh_note.add_theme_font_size_override("font_size", Settings.font_size(13))
 	gh_note.add_theme_color_override("font_color", Color(UiTheme.CREAM, 0.75))
 	ui_layer.add_child(gh_note)
+
+	# ---- 오른쪽 아래, GitHub 버튼 왼쪽: 작은 Godot 엔진 마크 (누르면 Godot 홈페이지)
+	var godot_mark := PanelContainer.new()
+	godot_mark.tooltip_text = GODOT_URL
+	godot_mark.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	# 밝은 보도 위에서도 보이도록 반투명한 어두운 바탕을 깐다
+	var mark_bg := StyleBoxFlat.new()
+	mark_bg.bg_color = Color(0.08, 0.05, 0.04, 0.45)
+	mark_bg.set_corner_radius_all(17)
+	mark_bg.content_margin_left = 10
+	mark_bg.content_margin_right = 14
+	mark_bg.content_margin_top = 6
+	mark_bg.content_margin_bottom = 6
+	godot_mark.add_theme_stylebox_override("panel", mark_bg)
+	var mark_row := HBoxContainer.new()
+	mark_row.add_theme_constant_override("separation", 8)
+	mark_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	godot_mark.add_child(mark_row)
+	var mark_icon := TextureRect.new()
+	mark_icon.texture = GODOT_ICON
+	mark_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mark_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	mark_icon.custom_minimum_size = Vector2(22, 22)
+	mark_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mark_row.add_child(mark_icon)
+	var mark_text := Label.new()
+	mark_text.text = "Made with Godot"
+	mark_text.add_theme_font_size_override("font_size", Settings.font_size(13))
+	mark_text.add_theme_color_override("font_color", Color(UiTheme.CREAM, 0.85))
+	mark_row.add_child(mark_text)
+	godot_mark.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	godot_mark.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	godot_mark.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	godot_mark.offset_right = -28 - 210 - 14   # GitHub 버튼(오른쪽 여백 28, 너비 210) 왼쪽
+	godot_mark.offset_bottom = -30
+	godot_mark.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			OS.shell_open(GODOT_URL))
+	godot_mark.mouse_entered.connect(func(): mark_bg.bg_color.a = 0.62)
+	godot_mark.mouse_exited.connect(func(): mark_bg.bg_color.a = 0.45)
+	ui_layer.add_child(godot_mark)
 
 	# ---- 왼쪽 아래: 버전
 	var ver := Label.new()

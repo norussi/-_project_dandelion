@@ -173,12 +173,14 @@ jobs:
 
           | 운영체제 | 파일 | 실행 방법 |
           |---|---|---|
-          | Windows 10/11 (64비트) | \`Dandelion-v$v-windows.exe\` | 더블클릭. “Windows의 PC 보호” 창이 뜨면 **추가 정보 → 실행** |
-          | macOS 11 이상 (Intel·Apple Silicon) | \`Dandelion-v$v-macos.zip\` | 압축을 풀고 앱을 **응용 프로그램**으로 옮긴 뒤, 처음 한 번은 **Control-클릭 → 열기**. 그래도 막히면 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기** |
+          | Windows 10/11 (64비트) | \`Dandelion-v$v-windows.exe\` | 더블클릭. “Windows의 PC 보호” 창이 뜨면 **추가 정보 → 실행**. “스마트 앱 컨트롤이 … 차단했습니다”가 뜨면 **Windows 보안 → 앱 및 브라우저 컨트롤 → 스마트 앱 컨트롤**을 끄거나, 아래 “소스로 실행” 방법을 이용 |
+          | macOS 11 이상 (Intel·Apple Silicon) | \`Dandelion-v$v-macos.zip\` | 압축을 풀고 앱을 **응용 프로그램**으로 옮긴 뒤 실행. “손상되었기 때문에 열 수 없습니다”가 뜨면 터미널에서 \`xattr -cr /Applications/Dandelion.app\`을 실행한 뒤 다시 열기 (파일은 정상) |
           | Linux (x86_64) | \`Dandelion-v$v-linux.tar.gz\` | \`tar -xzf Dandelion-v$v-linux.tar.gz && ./Dandelion.x86_64\` |
 
           서명·공증하지 않은 실행 파일이라 처음 실행할 때 경고가 나옵니다. 헤드폰을 권장합니다.
           파일이 온전한지 확인하려면 \`SHA256SUMS.txt\`와 비교하세요.
+
+          **소스로 실행 (모든 운영체제)**: [Godot ${GODOT_VERSION}](https://godotengine.org/download) 표준판(.NET 없는 버전)을 설치하고, 프로젝트 매니저에서 **가져오기 → \`Dandelion/project.godot\`** 를 고른 뒤 **실행**(F5)을 누르세요.
 
           이 게임은 [Godot Engine](https://godotengine.org/license/) (MIT 라이선스)으로 만들었습니다.
           EOF

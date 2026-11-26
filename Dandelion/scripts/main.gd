@@ -182,6 +182,9 @@ func _update_hints(delta: float) -> void:
 		_hint("stairs", "비상계단이다. 1층 출구까지 내려가자!", 3.5)
 	if _heat > 0.05:
 		_hint("fire", "불이다! 너무 뜨겁다. 이쪽으로는 갈 수 없다.", 3.5)
+	for s in get_tree().get_nodes_in_group("fire_shutters"):
+		if player.global_position.distance_to(s.global_position) < 4.5:
+			_hint("shutter", "방화셔터가 내려와 복도가 막혀 있다.\n불길과 연기가 번지지 않게 막는 화재 차단벽이다. 계단으로 돌아가자.", 4.5)
 	if breath < 35.0:
 		_hint("low", "숨이 막힌다… 서둘러야 해!", 3.0)
 

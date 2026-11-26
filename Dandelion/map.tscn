@@ -16,6 +16,7 @@
 [ext_resource type="Script" uid="uid://3hk5jk48j0wn" path="res://parts/smoke_zone.gd" id="14_h75vw"]
 [ext_resource type="Script" uid="uid://cmp6ulk60roer" path="res://parts/smoke_layer.gd" id="15_7vxqa"]
 [ext_resource type="Material" path="res://materials/daylight.tres" id="16_qw8h8"]
+[ext_resource type="Script" path="res://parts/fire_shutter.gd" id="31_shutter"]
 [ext_resource type="Script" uid="uid://10ktkr5cs7ro" path="res://parts/descender.gd" id="17_desc"]
 [ext_resource type="Material" path="res://materials/wall_lower.tres" id="21_wlow"]
 [ext_resource type="Material" path="res://materials/dark.tres" id="22_dark"]
@@ -2234,6 +2235,10 @@ sides = 16
 material = ExtResource("12_y1wlr")
 
 [node name="Fires" type="Node3D" parent="Floor2" unique_id=460122641]
+
+[node name="FireShutter" type="StaticBody3D" parent="Floor2"]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, -7, 0, 9.5)
+script = ExtResource("31_shutter")
 
 [node name="SmokeZones" type="Node3D" parent="Floor2" unique_id=553122128]
 

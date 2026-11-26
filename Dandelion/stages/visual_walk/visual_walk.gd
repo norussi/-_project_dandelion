@@ -58,6 +58,21 @@ const PED_RED := 60.0
 const TARGET_FLOOR := 5
 const TARGET_ROOM := 3
 
+# v0.4.3 (시각장애 당사자 설문 반영)
+# 신호등 없는 골목 찻길: 골목을 가로지르는 좁은 일방 찻길 (z -33 ~ -36.5)
+const SIDE_Z0 := -33.0
+const SIDE_Z1 := -36.5
+const SIDE_LANE := -34.75
+const SIDE_HALF_X := 20.0
+const SIDE_CAR_SPEED := 4.5
+# 지팡이가 위로 넘어가는 낮은 장애물(볼라드)의 충돌 층. 걸으며 좌우로 짚을 때는 걸리지 않고,
+# 직접 짚을 때(클릭, 발 앞 짚기)와 몸에는 닿는다.
+const LOW_LAYER := 2
+const HOSP_DOOR_Z := -62.1
+# 발전기 소음 크기: 평소 / 골목 찻길 근처 (dB)
+const NOISE_DB := 2.0
+const NOISE_DB_SIDE := -10.0
+
 const BRAILLE_DIGITS := ["⠚", "⠁", "⠃", "⠉", "⠙", "⠑", "⠋", "⠛", "⠓", "⠊"]
 const BRAILLE_NUM := "⠼"
 const BR_ELEVATOR := "⠝⠂⠐⠕⠘⠝⠕⠓⠎"   # 엘리베이터
@@ -179,6 +194,32 @@ var no_paving_time := 0.0
 var last_paving_pos := Vector3(0, 0.05, 3.2)
 var helping := false
 var count_help := 0
+var count_refused := 0
+var help_choice: Control
+var help_choice_open := false
+signal help_answered(accept: bool)
+
+# v0.4.3: 골목 찻길, 낮은 장애물, 병원 유리문, 다시보기 화면
+var side_cars: Array[Dictionary] = []
+var side_timer := 3.0
+var side_last_in_lane := -100.0
+var count_close := 0
+var count_knee := 0
+var count_door := 0
+var hosp_door_nodes: Array[Node] = []
+var hosp_door_open := false
+var door_event_done := false
+var shop_clock := 0.0
+var noise_duck := 0.0
+var replay := false
+var reveal_on := false
+var reveal_visuals: Array = []        # [MeshInstance3D, label]
+var reveal_root: Node3D
+var reveal_light: DirectionalLight3D
+var reveal_mats := {}
+var world_env: Environment
+var sound_chime: AudioStreamWAV
+var sound_door: AudioStreamWAV
 
 # 신호등과 차량
 var ped_green := false
@@ -236,6 +277,9 @@ func _ready() -> void:
 	sound_horn = _make_sound(420.0, 0.6, 10)
 	sound_ding = _make_sound(1320.0, 1.2, 11)
 	sound_click = _make_sound(2400.0, 0.04, 12)
+	sound_chime = _make_sound(1175.0, 1.1, 13)
+	sound_door = _make_sound(180.0, 0.5, 14)
+	replay = Game.visual_walk_replay
 	_start_noise()
 	_reroll_gps()
 	_find_tts_voice()
@@ -274,6 +318,7 @@ func _setup_materials() -> void:
 	environment.background_color = Color.BLACK
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
 	env.environment = environment
+	world_env = environment
 	add_child(env)
 
 # ================================================================ world
@@ -282,14 +327,18 @@ func _build_world() -> void:
 	_box(Vector3(20,-0.25,-30), Vector3(140,0.5,100), "", 0.0, false)
 
 	# --- 골목 (z 7 ~ -47)
-	_box(Vector3(-8,2.5,-20), Vector3(1,5,54), "wall", 1.0)
-	_box(Vector3(8,2.5,-20), Vector3(1,5,54), "wall", 1.0)
+	# 골목 양쪽 벽 (z -33 ~ -36.5는 골목을 가로지르는 찻길로 트여 있다)
+	for sx in [-1.0, 1.0]:
+		_box(Vector3(8*sx,2.5,-13), Vector3(1,5,40), "wall", 1.0)
+		_box(Vector3(8*sx,2.5,-41.75), Vector3(1,5,10.5), "wall", 1.0)
 	_box(Vector3(0,2.5,7), Vector3(17,5,1), "wall", 1.0)
 	_box(Vector3(-2.0,1.1,-12), Vector3(11,2.2,1.0), "barrier", 1.0)
 	_box(Vector3(2.0,1.1,-25), Vector3(11,2.2,1.0), "barrier", 1.0)
 	_box(Vector3(-2.0,1.1,-38), Vector3(11,2.2,1.0), "barrier", 1.0)
 	for z in [0.0,-7.0,-18.0,-32.0,-44.0]:
 		_box(Vector3(-6.7,0.65,z), Vector3(1.1,1.3,1.8), "box", 0.4)
+		if z == -32.0:
+			continue          # 이 자리는 골목 찻길이다
 		_box(Vector3(6.9,1.6,z-2), Vector3(0.18,3.2,0.18), "pole", 0.0)
 		_box(Vector3(6.5,3.15,z-2), Vector3(0.9,0.18,0.4), "", 0.0)
 	for z in [-4.0,-20.0,-43.0]:
@@ -304,7 +353,22 @@ func _build_world() -> void:
 	_box(Vector3(4.1,0.65,-10.5), Vector3(0.05,1.0,0.05), "scooter", 0.0)
 	_box(Vector3(4.1,1.13,-10.5), Vector3(0.05,0.04,0.5), "scooter", 0.0)
 	_box(NOISE_POS, Vector3(1.2,1.0,0.8), "generator", 0.5)
+	# 편의점과 가게 앞 진열대 (점자블록 위까지 나와 있다)
+	_box(Vector3(7.3,1.3,-15.0), Vector3(0.4,2.6,3.2), "shop", 0.6)
+	_box(Vector3(5.6,0.45,-15.0), Vector3(2.6,0.9,0.7), "display", 0.3)
+	# 낮은 볼라드: 지팡이가 위로 넘어가 정강이·무릎에 부딪힌다
+	for b in [Vector3(1.6,0,-5.8), Vector3(3.4,0,-32.6), Vector3(5.8,0,-32.6), Vector3(-1.2,0,-45.9), Vector3(1.2,0,-45.9), Vector3(-1.2,0,-56.2), Vector3(1.2,0,-56.2)]:
+		_box(b + Vector3(0,0.225,0), Vector3(0.2,0.45,0.2), "bollard", 0.0, true, true, false, LOW_LAYER)
 
+	# --- 신호등 없는 골목 찻길 (z -33 ~ -36.5, 골목을 가로지른다)
+	for sx in [-1.0, 1.0]:
+		_box(Vector3(14.25*sx,2.5,-32.75), Vector3(11.5,5,0.5), "wall", 1.0)
+		_box(Vector3(14.25*sx,2.5,-36.75), Vector3(11.5,5,0.5), "wall", 1.0)
+		_box(Vector3(20.25*sx,2.5,-34.75), Vector3(0.5,5,4.5), "wall", 1.0)
+	for cz in [SIDE_Z0, SIDE_Z1]:
+		var inner: float = cz + (0.12 if cz == SIDE_Z0 else -0.12)
+		_segment(Vector3(-7.5,0.03,cz), Vector3(7.5,0.03,cz))
+		_segment(Vector3(-7.5,0.03,inner), Vector3(7.5,0.03,inner))
 	# --- 차도와 횡단보도 (z -47 ~ -55, x -30 ~ 30)
 	for sx in [-1.0, 1.0]:
 		_box(Vector3(19.25*sx,2.5,-46.5), Vector3(21.5,5,1), "wall", 1.0)
@@ -334,6 +398,30 @@ func _build_world() -> void:
 	_box(Vector3(1.45,1.25,-62.0), Vector3(0.12,2.5,0.12), "door", 0.2)
 	_box(Vector3(0,4.4,-61.9), Vector3(0.3,1.4,0.2), "", 0.0, true, false)
 	_box(Vector3(0,4.4,-61.9), Vector3(1.3,0.3,0.2), "", 0.0, true, false)
+	# 인도 위 불법 주차 차량 (점자블록 위까지 걸쳐 있다)
+	_box(Vector3(1.8,0.55,-58.5), Vector3(4.2,0.8,1.8), "parked_car", 0.8)
+	_box(Vector3(1.5,1.25,-58.5), Vector3(2.2,0.6,1.6), "parked_car", 0.8)
+	# 병원 현관 유리문: 밤이라 자동문이 꺼져 있어 손으로 밀어야 한다
+	var hdoor := StaticBody3D.new()
+	hdoor.position = Vector3(0, 1.25, HOSP_DOOR_Z)
+	hdoor.set_meta("label", "hosp_door")
+	hdoor.set_meta("overhang", false)
+	var hshape_node := CollisionShape3D.new()
+	var hshape := BoxShape3D.new()
+	hshape.size = Vector3(2.78, 2.5, 0.08)
+	hshape_node.shape = hshape
+	hdoor.add_child(hshape_node)
+	var hvis := MeshInstance3D.new()
+	var hbm := BoxMesh.new()
+	hbm.size = Vector3(2.78, 2.5, 0.08)
+	hvis.mesh = hbm
+	hvis.material_override = black_material
+	hdoor.add_child(hvis)
+	reveal_visuals.append([hvis, "hosp_door"])
+	hdoor.add_child(_outline_mesh([[Vector3.ZERO, Vector3(2.78, 2.5, 0.08)], [Vector3(0.25, 0.0, 0.08), Vector3(0.04, 0.5, 0.06)]], 0.6))
+	add_child(hdoor)
+	hosp_door_nodes.append(hdoor)
+	interactables.append({"pos": Vector3(0, 0, -61.35), "r": 1.4, "kind": "hosp_door", "hint": "유리문 손잡이를 더듬어 밀기"})
 	_box(Vector3(-4.5,0.55,-68.0), Vector3(2.4,1.1,0.8), "desk", 0.5)
 	_box(Vector3(5.5,0.23,-66.0), Vector3(2.0,0.46,0.6), "bench", 0.3)
 	_build_elevator_hall(0.0, true)
@@ -362,7 +450,8 @@ func _build_world() -> void:
 	_warning_block(Rect2(-0.6, -74.85, 1.2, 0.6))     # 엘리베이터 앞
 
 	# --- 바닥 줄눈 (촉각 전용). 차도 아스팔트에는 줄눈이 없다.
-	_grid(-7.5, 7.5, 6.5, -47.0, 0.5)
+	_grid(-7.5, 7.5, 6.5, SIDE_Z0, 0.5)
+	_grid(-7.5, 7.5, SIDE_Z1, -47.0, 0.5)
 	_grid(-7.5, 7.5, -55.0, -62.0, 0.5)
 	_grid(-7.5, 7.5, -63.0, -75.0, 0.6)
 	_grid(UP_X-2.0, UP_X+2.0, -59.0, -75.0, 0.6)
@@ -446,6 +535,7 @@ func _build_elevator_hall(ox: float, lobby: bool) -> void:
 		vis.mesh = bm
 		vis.material_override = black_material
 		door.add_child(vis)
+		reveal_visuals.append([vis, "elev_door"])
 		door.add_child(_outline_mesh([[Vector3.ZERO, Vector3(1.1,2.2,0.06)]], 0.8))
 		add_child(door)
 		if lobby:
@@ -570,7 +660,7 @@ func _outline_mesh(boxes: Array, reflect: float) -> MeshInstance3D:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
-func _box(center: Vector3, size: Vector3, label: String = "", reflect: float = 0.0, outline: bool = true, collision: bool = true, overhang: bool = false) -> void:
+func _box(center: Vector3, size: Vector3, label: String = "", reflect: float = 0.0, outline: bool = true, collision: bool = true, overhang: bool = false, layer: int = 1) -> void:
 	var visual := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
@@ -578,8 +668,10 @@ func _box(center: Vector3, size: Vector3, label: String = "", reflect: float = 0
 	visual.material_override = black_material
 	visual.position = center
 	add_child(visual)
+	reveal_visuals.append([visual, label if label != "" else ("ground" if center.y < 0.0 else "")])
 	if collision:
 		var solid := StaticBody3D.new()
+		solid.collision_layer = layer
 		solid.position = center
 		solid.set_meta("label", label)
 		solid.set_meta("overhang", overhang)
@@ -605,6 +697,12 @@ func _paving_segment(a: Vector2, b: Vector2, index: int) -> void:
 		var cut_to := -30.5
 		_paving_rect(Rect2(rect.position.x, cut_from, rect.size.x, rect.end.y - cut_from), true)
 		_paving_rect(Rect2(rect.position.x, rect.position.y, rect.size.x, cut_to - rect.position.y), true)
+	elif index == 6:
+		# 골목 찻길에서 끊기고, 양쪽 연석 앞에 점형블록
+		_paving_rect(Rect2(rect.position.x, SIDE_Z0 + 0.6, rect.size.x, rect.end.y - (SIDE_Z0 + 0.6)), true)
+		_warning_block(Rect2(a.x - 0.6, SIDE_Z0, 1.2, 0.6))
+		_warning_block(Rect2(a.x - 0.6, SIDE_Z1 - 0.6, 1.2, 0.6))
+		_paving_rect(Rect2(rect.position.x, rect.position.y, rect.size.x, (SIDE_Z1 - 0.6) - rect.position.y), true)
 	else:
 		_paving_rect(rect, is_equal_approx(a.x, b.x))
 	if index > 0:
@@ -647,6 +745,7 @@ func _warning_block(rect: Rect2) -> void:
 func _build_player() -> void:
 	player = CharacterBody3D.new()
 	player.position = Vector3(0,0.05,3)
+	player.collision_mask = 1 | LOW_LAYER      # 몸은 낮은 볼라드에도 부딪힌다
 	var collider := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.28
@@ -791,6 +890,21 @@ func _build_ui() -> void:
 	buttons.add_child(menu_button)
 
 func _show_intro() -> void:
+	if replay:
+		title.text = "다시보기  /  같은 길, 보이는 화면"
+		body.text = ("같은 길을 처음부터 다시 걷는다. 이번에는 실제 거리 모습을 켜고 끌 수 있다.\n\n"
+			+ "· %s: 화면 보기 켜고 끄기\n" % _k("toggle_view")
+			+ "· 화면을 켜면 지팡이로 짚었던 것들이 실제로 어떤 모습이었는지 보인다.\n"
+			+ "· 화면을 끄면 처음처럼 지팡이 끝과 희미한 울림만 남는다. 둘을 번갈아 비교해 보자.\n\n"
+			+ _controls_line() + "\n\n"
+			+ "실제 감각의 재현이 아닌 허구적 시각화입니다.")
+		action.text = "골목에서 출발하기"
+		skip_button.text = "연습부터"
+		skip_button.visible = true
+		settings_button.visible = true
+		menu_button.visible = true
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		return
 	title.text = "민들레  /  DANDELION"
 	body.text = ("밤 11시 47분, 병원에서 전화가 왔다.\n“아버님이 깨어나셨어요. 5층 503호에서 계속 찾고 계십니다.”\n\n"
 		+ "익숙했던 골목은 공사로 길이 바뀌었다. 큰길의 횡단보도도 건너야 한다.\n흰 지팡이 하나로 병원 503호까지 가야 한다.\n\n"
@@ -818,13 +932,15 @@ func _show_pause_text() -> void:
 	body.text = (_controls_line() + "\n"
 		+ "%s: 바라보는 곳 짚기 (손에서 1.2m 이내) · %s: 발 앞 짚기\n" % [_k("cane_tap"), _k("tap")]
 		+ "%s: 누르고 있는 동안 몸을 낮춘다 (머리 높이 돌출물 피하기)\n" % _k("crouch")
-		+ "%s: 손으로 더듬기 (신호기 버튼, 엘리베이터 버튼, 문 옆 명패)\n" % _k("interact")
-		+ "%s: 휴대폰 음성 안내 (골목에서는 오차가 크다)\n\n" % _k("phone")
+		+ "%s: 손으로 더듬기 (신호기 버튼, 문 손잡이, 엘리베이터 버튼, 문 옆 명패)\n" % _k("interact")
+		+ "%s: 휴대폰 음성 안내 (골목에서는 오차가 크다)\n" % _k("phone")
+		+ ("%s: 화면 보기 켜고 끄기 (다시보기)\n\n" % _k("toggle_view") if replay else "\n")
 		+ "· 걸으면 지팡이가 걸음에 맞춰 좌우를 번갈아 짚는다. (설정에서 끌 수 있다)\n"
+		+ "  낮은 볼라드처럼 무릎 아래 물체는 지팡이가 넘어갈 수 있다. 의심되면 직접 짚어 보자.\n"
 		+ "· 점자블록의 줄무늬를 따라가면 길이 이어진다. 끊기거나 막힌 곳도 있다.\n"
-		+ "· 점자블록을 오래 찾지 못하면 지나가던 사람이 도움을 청해 온다.\n"
-		+ "· 큰길: 기둥의 ‘딱, 딱’ 위치 알림음을 찾아 버튼을 누르고, 녹색 신호 안내를 기다리자.\n"
-		+ "  녹색 신호 동안 건너편 기둥에서 유도음이 난다.\n"
+		+ "· 점자블록을 오래 찾지 못하면 지나가던 사람이 먼저 도움을 묻는다. 사양할 수도 있다.\n"
+		+ "· 골목 찻길에는 신호등이 없다. 차 소리가 멀어진 것을 확인하고 건너자.\n"
+		+ "· 큰길: 이쪽 신호기는 고장이다. 양쪽 차 소리가 멎고 건너편 기둥의 유도음이 들리면 녹색 신호다.\n"
 		+ "· 엘리베이터 버튼 위에는 점자가 있다. 버튼 위를 천천히 훑으면 읽을 수 있다.\n\n"
 		+ "%s: 계속하기 · %s: 처음부터 다시 시작" % [_k("pause_game"), _k("restart_game")])
 	action.text = "다시 걷는다"
@@ -854,6 +970,7 @@ func _on_action() -> void:
 	if finished:
 		story_page += 1
 		if story_page >= 4:
+			Game.visual_walk_replay = false
 			get_tree().reload_current_scene()
 		else:
 			_show_ending_page()
@@ -861,14 +978,16 @@ func _on_action() -> void:
 	if playing:
 		_resume()
 		return
-	_begin(true)
+	_begin(not replay)
 
 
 func _resume() -> void:
 	paused = false
 	panel.hide()
 	message.visible = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if help_choice_open else Input.MOUSE_MODE_CAPTURED
+	if help_choice:
+		help_choice.visible = help_choice_open
 
 
 func _begin(with_tutorial: bool) -> void:
@@ -886,8 +1005,13 @@ func _begin(with_tutorial: bool) -> void:
 
 
 func _on_skip() -> void:
+	if finished:
+		# 엔딩 마지막 쪽: 화면 보기를 켤 수 있는 다시보기로 처음부터
+		Game.visual_walk_replay = true
+		get_tree().reload_current_scene()
+		return
 	if not playing:
-		_begin(false)
+		_begin(replay)
 	elif tutorial_active:
 		_resume()
 		_start_main(false)
@@ -902,10 +1026,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("interact") or event.is_action_pressed("pause_game"):
 			_close_touch()
 		return
+	if help_choice_open and not paused and event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_1:
+			_answer_help(true)
+			return
+		if event.physical_keycode == KEY_2:
+			_answer_help(false)
+			return
+	if event.is_action_pressed("toggle_view") and replay and playing and not paused and not finished:
+		_set_reveal(not reveal_on)
+		return
 	if event.is_action_pressed("pause_game") and playing and not finished:
 		paused = not paused
 		panel.visible = paused
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if paused else Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if (paused or help_choice_open) else Input.MOUSE_MODE_CAPTURED
+		if help_choice:
+			help_choice.visible = help_choice_open and not paused
 		# 일시정지 중에는 하단 안내 문구를 숨겨 패널 뒤로 겹치지 않게 한다
 		message.visible = not paused
 		if paused:
@@ -913,7 +1049,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if not playing or paused or finished:
 		return
-	if event is InputEventMouseMotion:
+	if event is InputEventMouseMotion and not help_choice_open:
 		var sens := Settings.mouse_sensitivity
 		var dy: float = -event.relative.y if Settings.invert_y else event.relative.y
 		player.rotation.y -= event.relative.x * sens
@@ -997,13 +1133,24 @@ func _physics_process(delta: float) -> void:
 
 	_signal_process(delta)
 	_cars_process(delta)
+	_side_cars_process(delta)
 	_elevator_process(delta)
+	_door_event_check()
+	_shop_chime(delta)
 	_update_near_item()
 
 	# 소음(발전기, 지나가는 차)이 반향을 덮는다.
 	var noise_distance := Vector2(player.global_position.x - NOISE_POS.x, player.global_position.z - NOISE_POS.z).length()
 	echo_gain = clampf((noise_distance - 3.0) / 6.5, 0.0, 1.0)
-	for car in cars:
+	# 신호등 없는 골목 찻길 근처에서는 발전기 소음을 낮춘다. 차 소리만으로 건너야 하는 곳이라
+	# 소음이 차 소리를 덮으면 판단할 단서가 사라진다. (v0.4.3)
+	var pp := player.global_position
+	var near_side := pp.z < SIDE_Z0 + 2.0 and pp.z > SIDE_Z1 - 2.0 and absf(pp.x) < SIDE_HALF_X
+	noise_duck = move_toward(noise_duck, 1.0 if near_side else 0.0, delta * 0.8)
+	if noise_player:
+		noise_player.volume_db = lerpf(NOISE_DB, NOISE_DB_SIDE, noise_duck)
+	echo_gain = lerpf(echo_gain, maxf(echo_gain, 0.8), noise_duck)
+	for car in cars + side_cars:
 		var cb: AnimatableBody3D = car["body"]
 		var cd := Vector2(player.global_position.x - cb.position.x, player.global_position.z - cb.position.z).length()
 		echo_gain = minf(echo_gain, clampf((cd - 2.5) / 6.0, 0.0, 1.0))
@@ -1015,6 +1162,8 @@ func _physics_process(delta: float) -> void:
 	if tutorial_active:
 		hint = "연습 %d/5   ·   " % mini(tut_step + 1, 5) + hint
 	status.text = hint + "%s 짚기 · %s 웅크리기 · %s 휴대폰 · %s 도움말" % [_k("cane_tap"), _k("crouch"), _k("phone"), _k("pause_game")]
+	if replay:
+		status.text += " · %s 화면 %s" % [_k("toggle_view"), "끄기" if reveal_on else "보기"]
 
 	var outside := player.global_position.z > -62.5 and player.global_position.x < 40.0 and not tutorial_active
 	beacon_clock += delta
@@ -1044,12 +1193,16 @@ func _story_checkpoints(noise_distance: float) -> void:
 		_notify("전화 속 목소리가 떠오른다. “천천히, 조심해서 오세요.”", 6)
 	elif _once("noise", noise_distance < 7.0):
 		_notify("발전기 소리가 골목을 가득 채운다.\n지팡이 소리의 울림도, 병원 안내음도 들리지 않는다. 지팡이 끝의 감각만 남았다.", 8)
+	elif _once("side_road", p.z < -31.9 and p.z > -33.6 and absf(p.x) < 7.5):
+		_notify("발전기 소리가 등 뒤로 잦아들고, 엔진 소리가 옆으로 지나간다. 골목을 가로지르는 좁은 찻길이다.\n신호등이 없다. 차 소리가 멀어지고 조용해진 것을 확인하고 곧게 건너자.", 8)
+	elif _once("side_crossed", p.z < SIDE_Z1 - 0.7 and p.z > -40.0 and absf(p.x) < 7.5):
+		_notify("건넜다. 발밑에 다시 단단한 보도가 느껴진다.", 4)
 	elif _once("road", p.z < -43.0):
-		_notify("차 소리가 왼쪽과 오른쪽에서 지나간다. 큰길이다.\n‘딱, 딱’ — 신호기 기둥의 위치 알림음을 찾아가 버튼을 누르자 (%s)." % _k("interact"), 8)
+		_notify("차 소리가 왼쪽과 오른쪽에서 지나간다. 큰길이다.\n점형블록 바로 오른쪽에 신호기 기둥이 있다. 버튼을 눌러 보자 (%s)." % _k("interact"), 8)
 	elif _once("crossed", p.z < -55.6):
 		_notify("건넜다. 병원 현관의 안내음이 바로 앞에서 들린다.", 5)
 	elif _once("lobby", p.z < -63.2):
-		_notify("자동문이 열린다. 병원 로비. 밤이라 안내 데스크는 비어 있다.\n바닥의 점자블록이 안쪽으로 이어진다. 엘리베이터를 찾아 5층으로.", 8)
+		_notify("병원 로비. 밤이라 안내 데스크는 비어 있다.\n바닥의 점자블록이 안쪽으로 이어진다. 엘리베이터를 찾아 5층으로.", 8)
 
 func _once(key: String, condition: bool) -> bool:
 	if condition and not flags.has(key):
@@ -1076,7 +1229,7 @@ func _cane_target(straight_ahead: bool) -> Dictionary:
 	if not straight_ahead:
 		var from := camera.global_position
 		var fwd := -camera.global_transform.basis.z
-		var q := PhysicsRayQueryParameters3D.create(from, from + fwd * 4.0, 1, [player.get_rid()])
+		var q := PhysicsRayQueryParameters3D.create(from, from + fwd * 4.0, 1 | LOW_LAYER, [player.get_rid()])
 		var r := space.intersect_ray(q)
 		var want_h := reach_h
 		if not r.is_empty():
@@ -1095,7 +1248,7 @@ func _cane_target(straight_ahead: bool) -> Dictionary:
 		exact = true
 	# 손에서 지팡이 끝까지 사이에 무언가 있으면 거기에 걸린다.
 	var dir := (point - hand).normalized()
-	var q2 := PhysicsRayQueryParameters3D.create(hand, point + dir * 0.05, 1, [player.get_rid()])
+	var q2 := PhysicsRayQueryParameters3D.create(hand, point + dir * 0.05, 1 | LOW_LAYER, [player.get_rid()])
 	q2.hit_from_inside = true
 	var r2 := space.intersect_ray(q2)
 	var collider: Object = null
@@ -1183,7 +1336,7 @@ func _cane_impact(info: Dictionary) -> void:
 			_play_sound(sound_tap, p + Vector3(0,0.05,0), -9)
 		_paving_feedback(surface)
 		if surface == "" and p.z < ROAD_Z0 + 0.05 and p.z > ROAD_Z1 - 0.05 and absf(p.x) < 30.0:
-			_once_notify("asphalt", "매끈한 아스팔트. 횡단보도의 흰 칠은 지팡이로 느낄 수 없다.\n방향은 신호기 소리로 잡아야 한다.", 5)
+			_quiet_once_notify("asphalt", "매끈한 아스팔트. 횡단보도의 흰 칠은 지팡이로 느낄 수 없다.\n방향은 신호기 소리로 잡아야 한다.", 5)
 	else:
 		count_contacts += 1
 		_pulse(p, OBSTACLE_TOUCH, ECHO_TAP * 0.7)
@@ -1233,6 +1386,22 @@ func _check_collisions() -> void:
 			else:
 				text += "공사용 파이프가 머리 높이로 튀어나와 있다. %s를 누른 채 몸을 낮추거나 돌아가야 한다." % _k("crouch")
 			_notify(text, 6)
+			return
+		if label == "bollard":
+			if bump_cooldown > 0:
+				return
+			bump_cooldown = 1.6
+			stun = 0.7
+			shake = 0.4
+			flash.color = Color(1,1,1,0.35)
+			count_knee += 1
+			_pulse(p, OBSTACLE_TOUCH, 0.0)
+			_play_sound(sound_thud, p, -4)
+			var away := player.global_position - p
+			away.y = 0
+			if away.length() > 0.01:
+				player.global_position += away.normalized() * 0.1
+			_notify("윽— 정강이를 무언가에 세게 부딪혔다. 무릎 높이의 낮은 볼라드다.\n걸으며 좌우로 짚을 때 지팡이가 그 위로 넘어가 버렸다. 의심되면 %s로 발 앞을 직접 짚어 보자." % _k("tap"), 6)
 			return
 		if label != "" and absf(c.get_normal().y) < 0.5 and bump_cooldown <= 0:
 			bump_cooldown = 1.4
@@ -1294,6 +1463,12 @@ func _describe_contact(label: String, prefix: String) -> void:
 		"door": "매끈한 기둥. 출입문 틀이다.",
 		"facade": "병원 건물 외벽이다. 입구는 가운데에 있다.",
 		"car": "매끈하고 차가운 철판 — 자동차다! 지금 차도 위에 서 있다.",
+		"side_car": "지팡이 끝이 둥글고 물렁한 것에 걸렸다 — 자동차 바퀴다!\n조금만 늦었으면 지팡이가 바퀴에 깔렸을 것이다. 차가 지나갈 때까지 물러서 있자.",
+		"parked_car": "인도 한가운데에 매끈한 철판 — 차다. 인도 위에, 점자블록까지 걸쳐 불법 주차되어 있다.\n차 옆을 따라 돌아가야 한다. 사이드미러에 부딪히지 않게 조심하자.",
+		"bollard": "무릎 높이의 짧고 단단한 기둥 — 낮은 볼라드다. 걸을 때는 지팡이가 위로 넘어가 버리기 쉽다.",
+		"shop": "차가운 유리창. 안에서 냉장고가 웅웅거린다. 편의점 앞이다.",
+		"display": "허리 높이의 선반에 상자와 봉지가 잔뜩 놓여 있다. 가게 앞에 내놓은 진열대다.\n점자블록 위까지 나와 있다. 왼쪽으로 돌아가야 한다.",
+		"hosp_door": "매끈하고 차가운 유리 — 병원 현관 유리문이다. 밤이라 자동문이 꺼져 있다.\n손잡이를 더듬어 밀고 들어가자. (%s)" % _k("interact"),
 		"signal_pole": "가느다란 금속 기둥, 허리 높이에 상자가 달려 있다. 음향신호기다. (%s: 버튼 누르기)" % _k("interact"),
 		"desk": "높은 탁자 — 안내 데스크. 밤이라 아무도 없다.",
 		"elev_wall": "매끈한 금속 벽. 엘리베이터 안이다. 문 쪽 오른쪽 벽에 버튼판이 있다. (%s)" % _k("interact"),
@@ -1309,6 +1484,12 @@ func _describe_contact(label: String, prefix: String) -> void:
 	elif prefix != "":
 		_notify(prefix + "무언가 단단한 것.", 2.5)
 
+# 더 중요한 안내가 떠 있는 동안에는 덮어쓰지 않고 다음 기회로 미룬다
+func _quiet_once_notify(key: String, text: String, duration: float) -> void:
+	if message_ttl > 0.5:
+		return
+	_once_notify(key, text, duration)
+
 func _once_notify(key: String, text: String, duration: float) -> void:
 	if not flags.has(key):
 		flags[key] = true
@@ -1322,6 +1503,11 @@ func _my_pole() -> Vector3:
 
 func _other_pole() -> Vector3:
 	return SIGNAL_FAR if road_side > 0 else SIGNAL_POLE
+
+# v0.4.3: 골목 쪽(이쪽) 음향신호기는 고장이다. 버튼을 눌러도 음성 안내도, 위치 알림음도 나오지 않는다.
+# 건너편(병원 쪽) 신호기는 정상이라 녹색 신호 동안 유도음이 난다.
+func _pole_works(pole: Vector3) -> bool:
+	return not pole.is_equal_approx(SIGNAL_POLE)
 
 func _signal_process(delta: float) -> void:
 	var p := player.global_position
@@ -1339,30 +1525,48 @@ func _signal_process(delta: float) -> void:
 		sig_clock = PED_GREEN if ped_green else PED_RED
 		sig_warned = false
 		if ped_green and near_road:
-			if sig_requested or p.distance_to(_my_pole()) < 6.0:
-				_say("녹색 신호입니다. 건너가십시오.", 5)
+			if _pole_works(_my_pole()):
+				if sig_requested or p.distance_to(_my_pole()) < 6.0:
+					_say("녹색 신호입니다. 건너가십시오.", 5)
+			elif p.distance_to(_my_pole()) < 7.0 and not road_now:
+				if flags.has("broken_green"):
+					_notify("양쪽 차 소리가 멎었다. 건너편에서 ‘뚜르르’ 유도음 — 녹색 신호다.", 4)
+				else:
+					flags["broken_green"] = true
+					_notify("양쪽 차 소리가 멎고, 멈춰 선 엔진만 낮게 웅웅거린다.\n건너편 기둥에서 ‘뚜르르’ 유도음이 들린다. 녹색 신호다. 유도음 쪽으로 곧게 건너자.", 7)
 			sig_requested = false
 		elif not ped_green and road_now:
 			_notify("신호가 바뀌었다! 차들이 출발한다.", 4)
 	if ped_green and not sig_warned and sig_clock < 5.0 and near_road:
 		sig_warned = true
-		if p.distance_to(_my_pole()) < 6.0 or road_now:
+		if (p.distance_to(_my_pole()) < 6.0 or road_now) and (_pole_works(_my_pole()) or (road_now and _pole_works(_other_pole()))):
 			_say("신호가 곧 바뀝니다.", 3)
 	# 위치 알림음: 기둥을 찾을 수 있도록 일정하게 '딱, 딱' (양쪽 기둥 모두)
 	locator_clock += delta
 	if locator_clock > 1.3 and near_road and not road_now:
 		locator_clock = 0.0
-		_play_sound(sound_locator, _my_pole() + Vector3(0,1.2,0), -10, 20)
+		if _pole_works(_my_pole()):
+			_play_sound(sound_locator, _my_pole() + Vector3(0,1.2,0), -10, 20)
 	# 녹색 동안 건너편 기둥에서 유도음
 	guide_clock += delta
 	if ped_green and near_road and guide_clock > 0.75:
 		guide_clock = 0.0
-		_play_sound(sound_guide, _other_pole() + Vector3(0,1.4,0), -6, 30)
+		if _pole_works(_other_pole()):
+			_play_sound(sound_guide, _other_pole() + Vector3(0,1.4,0), -6, 30)
 
 func _press_signal() -> void:
 	var p := player.global_position
 	var pole := SIGNAL_POLE if p.distance_to(SIGNAL_POLE) < p.distance_to(SIGNAL_FAR) else SIGNAL_FAR
 	_play_sound(sound_click, pole + Vector3(0,1.1,0), -6)
+	if not _pole_works(pole):
+		_play_sound(sound_knock, pole + Vector3(0,1.1,0), -22)
+		var text := "딸깍. …버튼을 눌러도 아무 안내가 나오지 않는다. 버튼이 헐겁게 덜걱거린다.\n이 신호기는 고장 났다."
+		if flags.has("broken_known"):
+			_notify(text + " 차 소리와 건너편 유도음으로 녹색 신호를 알아내야 한다.", 5)
+		else:
+			flags["broken_known"] = true
+			_notify(text + "\n차 소리를 들어 보자. 양쪽 차들이 멈춰 서고, 건너편 기둥에서 ‘뚜르르’ 유도음이 들리면 녹색 신호다.", 9)
+		return
 	if ped_green:
 		_say("녹색 신호입니다. 남은 시간 %d초. 건너가십시오." % int(sig_clock), 5)
 	else:
@@ -1405,7 +1609,10 @@ func _red_light_entry() -> void:
 	var tw2 := create_tween()
 	tw2.tween_property(fade, "color:a", 0.0, 0.6)
 	await tw2.finished
-	_notify("놀란 가슴을 진정시키고 횡단보도 앞으로 물러섰다.\n빨간 신호에는 건너지 않는다. 기둥의 버튼(%s)을 누르고 녹색 신호 안내를 기다리자." % _k("interact"), 7)
+	if road_side > 0:
+		_notify("놀란 가슴을 진정시키고 횡단보도 앞으로 물러섰다.\n빨간 신호였다. 이쪽 신호기는 고장이니, 양쪽 차 소리가 멎고 건너편 유도음이 들릴 때까지 기다리자.", 8)
+	else:
+		_notify("놀란 가슴을 진정시키고 횡단보도 앞으로 물러섰다.\n빨간 신호에는 건너지 않는다. 기둥의 버튼(%s)을 누르고 녹색 신호 안내를 기다리자." % _k("interact"), 7)
 	helping = false
 	red_returning = false
 
@@ -1472,14 +1679,16 @@ func _spawn_car(lane: int) -> void:
 	b.set_meta("overhang", false)
 	b.position = Vector3(-34.0 * dir, 0, lane_z)
 	var parts := [[Vector3(0,0.55,0), Vector3(4.2,0.8,1.8)], [Vector3(-0.3*dir,1.25,0), Vector3(2.2,0.6,1.6)]]
+	var paint := "car%d" % (randi() % 4)
 	for part in parts:
 		var vis := MeshInstance3D.new()
 		var bm := BoxMesh.new()
 		bm.size = part[1]
 		vis.mesh = bm
 		vis.position = part[0]
-		vis.material_override = black_material
+		vis.material_override = _reveal_mat(paint) if reveal_on else black_material
 		b.add_child(vis)
+		reveal_visuals.append([vis, paint])
 	var shape_node := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(4.2, 1.5, 1.8)
@@ -1650,6 +1859,8 @@ func _update_near_item() -> void:
 				continue
 		elif str(item["kind"]).begins_with("call") and _player_in_car():
 			continue
+		elif item["kind"] == "hosp_door" and (hosp_door_open or player.global_position.z < HOSP_DOOR_Z):
+			continue
 		best = d
 		near_item = item
 
@@ -1660,6 +1871,8 @@ func _interact() -> void:
 	var kind := str(near_item["kind"])
 	if kind == "tut_door":
 		_tut_press_door()
+	elif kind == "hosp_door":
+		_push_hosp_door()
 	elif kind == "signal":
 		_press_signal()
 	elif kind.begins_with("call"):
@@ -1897,7 +2110,7 @@ func _finish() -> void:
 	panel.show()
 	if noise_player:
 		noise_player.stop()
-	for car in cars:
+	for car in cars + side_cars:
 		var e: AudioStreamPlayer3D = car["engine"]
 		e.stop()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -1906,32 +2119,36 @@ func _finish() -> void:
 
 func _show_ending_page() -> void:
 	var titles := ["01  /  503호", "02  /  목소리", "03  /  잔향", "04  /  함께 걷는 법"]
-	var record := "걸린 시간  %d분 %02d초\n지팡이에 걸린 장애물  %d번 · 머리를 부딪힌 횟수  %d번 · 경적  %d번 · 도움을 받은 횟수  %d번" % [int(elapsed)/60, int(elapsed)%60, count_contacts, count_head, count_honk, count_help]
+	var record := "걸린 시간  %d분 %02d초\n지팡이에 걸린 장애물  %d번 · 머리를 부딪힌 횟수  %d번 · 다리를 부딪힌 횟수  %d번\n경적  %d번 · 차가 바짝 다가온 순간  %d번 · 닫히는 문에 부딪힌 횟수  %d번\n도움을 받은 횟수  %d번 · 도움을 사양한 횟수  %d번" % [int(elapsed)/60, int(elapsed)%60, count_contacts, count_head, count_knee, count_honk, count_close, count_door, count_help, count_refused]
 	var pages := [
 		"문 옆 명패의 점자를 손끝으로 한 번 더 확인하고, 문을 두드렸다.\n\n“들어오세요.”\n\n소독약 냄새 사이로, 익숙한 목소리가 들린다.",
 		"손을 뻗자, 거칠고 따뜻한 손이 잡힌다.\n\n“왔니?”\n“응. 나 왔어.”\n\n오는 길에 하고 싶던 말은 많았는데,\n그 짧은 대답이면 충분했다.",
 		("보이지 않는 길에도, 돌아갈 곳은 있었다.\n\nDANDELION — 끝\n\n" + record + "\n\n"
-			+ "점자블록 위의 킥보드, 머리 높이의 간판, 뜯겨 나간 점자블록,\n안내음을 덮는 소음, 손끝으로 느낄 수 없는 횡단보도의 흰 칠,\n"
+			+ "점자블록 위의 킥보드, 머리 높이의 간판, 뜯겨 나간 점자블록,\n"
+			+ "지팡이를 넘어서는 낮은 볼라드, 신호등 없는 골목길, 손끝으로 느낄 수 없는 횡단보도의 흰 칠,\n"
 			+ "버튼 위 손톱만 한 점자 — 모두 누군가에게는 매일의 길입니다.\n\n오늘 길에서 겪은 불편은 눈이 아니라 길이 만든 것이었습니다."),
 		("이 길을 매일 걷는 이웃과 함께하는 방법\n\n"
-			+ "길에서\n"
-			+ "· 점자블록 위에는 킥보드, 자전거, 짐을 세워 두지 마세요. 점자블록은 누군가의 길입니다.\n"
-			+ "· 공사를 할 때는 점자블록이 끊기지 않게 하고, 돌아가는 길을 안내해 주세요.\n"
-			+ "· 머리 높이의 간판이나 나뭇가지처럼 튀어나온 것은 지팡이로 알 수 없습니다.\n"
-			+ "· 횡단보도 음향신호기와 점자 버튼이 고장 나 있으면 관리 기관에 알려 주세요.\n\n"
+			+ "길 위에서\n"
+			+ "· 점자블록 비워 두기 — 점자블록은 시각장애인의 눈입니다. 장애물들을 그 위에 두지 마세요.\n"
+			+ "· 보행에 위험한 곳 적극적으로 신고하기 — 고장 난 음향신호기나 머리 높이의 장애물처럼 지팡이로 알 수 없는 위험을 보면 관리 기관에 알려 주세요.\n\n"
+			+ "마주쳤을 때\n"
+			+ "· 문은 상대가 다 지나갈 때까지 잡아 주기 — 문이 닫히는 것을 볼 수 없어, 공공장소에서 부딪히는 사고가 잦습니다.\n"
+			+ "· 안내견은 건드리지 않기 — 안내견은 일하는 중입니다. 만지거나, 부르거나, 사진을 찍지 마세요.\n\n"
 			+ "도움을 드릴 때\n"
-			+ "· 먼저 “도와드릴까요?” 하고 물어보고, 원할 때만 도와주세요.\n"
-			+ "· 갑자기 팔이나 지팡이를 잡아끌지 마세요. 내 팔꿈치를 잡게 하고 반 걸음 앞에서 걸어 주세요.\n"
-			+ "· 길은 “저기”보다 “오른쪽으로 다섯 걸음”처럼 구체적으로 알려 주세요.\n"
-			+ "· 안내견은 일하는 중입니다. 만지거나 부르거나 먹을 것을 주지 마세요.\n"
-			+ "· 자리를 떠날 때는 말로 알려 주세요.\n\n"
+			+ "· 도움 의사 묻기 — “도와드릴까요?”라고 먼저 묻고, 괜찮다고 하면 물러나 주세요.\n"
+			+ "· 팔꿈치 내어 주기 — 도움 대상자를 잡아끌거나 뒤에서 밀지 말고, 팔꿈치를 내어준 후 반 걸음 앞에서 걸어 주세요.\n"
+			+ "· 주변 상황 알려 주기 — “앞에 계단이 있어요”처럼 주변 상황을 전해 주세요. 도움 받는 입장에서 안심하고 따라갈 수 있습니다.\n"
+			+ "· 길을 알려 줄 땐 최대한 구체적으로 알려 주기 — “저기” 대신 “오른쪽으로 다섯 걸음, 편의점 앞이에요.”\n"
+			+ "· 도움을 드린 후 떠날 때 말하기 — 말 없이 사라지면, 잠시 자리를 비운 건지 아예 떠나간 건지 알기 어렵습니다.\n\n"
 			+ "작은 배려가 끊긴 길을 다시 잇습니다.\n\n"
 			+ "이 작품의 윤곽선은 허구적 시각화이며, 실제 경험은 사람마다 다릅니다."),
 	]
 	title.text = titles[story_page]
 	body.text = pages[story_page]
 	action.text = "처음부터 다시 걷기" if story_page == 3 else "계속"
-	skip_button.visible = false
+	# 마지막 쪽에서만: 실제 거리 화면을 켜고 끌 수 있는 다시보기
+	skip_button.text = "다시보기 (화면 보기)"
+	skip_button.visible = story_page == 3
 	settings_button.visible = false
 	menu_button.visible = story_page == 3
 
@@ -1941,7 +2158,7 @@ func _start_noise() -> void:
 	noise_player = AudioStreamPlayer3D.new()
 	noise_player.stream = sound_noise
 	noise_player.position = NOISE_POS + Vector3(0, 0.5, 0)
-	noise_player.volume_db = 2.0
+	noise_player.volume_db = NOISE_DB
 	noise_player.unit_size = 3.0
 	noise_player.max_distance = 26.0
 	add_child(noise_player)
@@ -1960,6 +2177,7 @@ func _play_sound(stream: AudioStreamWAV, point: Vector3, volume: float, max_rang
 
 # kind: 0 지팡이 · 1 발걸음 · 2 현관 유도음 · 3 점자블록 · 4 물체 · 5 부딪힘 · 6 발전기(반복)
 #       7 신호기 위치 알림음 · 8 횡단 유도음 · 9 엔진(반복) · 10 경적 · 11 엘리베이터 차임 · 12 버튼
+#       13 가게 출입문 차임 · 14 문
 func _make_sound(frequency: float, duration: float, kind: int) -> AudioStreamWAV:
 	var rate := 22050
 	var count := int(duration * rate)
@@ -2017,6 +2235,17 @@ func _make_sound(frequency: float, duration: float, kind: int) -> AudioStreamWAV
 			12:
 				wave = rng.randf_range(-1,1) * 0.5 + sin(TAU * frequency * t) * 0.5
 				envelope = exp(-t * 120.0)
+			13:
+				# 딩—동: 가게 출입문 차임 (두 음)
+				var f2 := frequency if t < 0.45 else frequency * 0.8
+				var t2 := t if t < 0.45 else t - 0.45
+				wave = sin(TAU * f2 * t2) * 0.6 + sin(TAU * f2 * 2.0 * t2) * 0.15
+				envelope = minf(t2 * 200.0, 1.0) * exp(-t2 * 4.0)
+			14:
+				# 문: 경첩 삐걱임 + 닫히는 둔탁한 소리
+				low = low * 0.92 + rng.randf_range(-1,1) * 0.08
+				wave = sin(TAU * (frequency + 140.0 * t) * t) * 0.35 + low * 2.5
+				envelope = minf(t * 30.0, 1.0) * exp(-t * 5.0)
 		var sample := int(clampf(wave * envelope * 0.65,-1,1) * 32767)
 		data.encode_s16(i * 2, sample)
 	var stream := AudioStreamWAV.new()
@@ -2092,7 +2321,7 @@ func _sweep_tip(hand: Vector3, touchdown: bool, delta: float) -> Vector3:
 			if over == "":
 				_paving_feedback("")
 				if tip.z < ROAD_Z0 + 0.05 and tip.z > ROAD_Z1 - 0.05 and absf(tip.x) < 30.0:
-					_once_notify("asphalt", "매끈한 아스팔트. 횡단보도의 흰 칠은 지팡이로 느낄 수 없다.\n방향은 신호기 소리로 잡아야 한다.", 5)
+					_quiet_once_notify("asphalt", "매끈한 아스팔트. 횡단보도의 흰 칠은 지팡이로 느낄 수 없다.\n방향은 신호기 소리로 잡아야 한다.", 5)
 	sweep_contact = contact
 	sweep_contact_label = label if contact else ""
 	return tip
@@ -2164,6 +2393,7 @@ func _build_tutorial() -> void:
 	vis.mesh = bm
 	vis.material_override = black_material
 	door.add_child(vis)
+	reveal_visuals.append([vis, "tut_door"])
 	door.add_child(_outline_mesh([[Vector3.ZERO, Vector3(1.6, 2.5, 0.08)]], 0.6))
 	add_child(door)
 	tut_door_nodes.append(door)
@@ -2279,6 +2509,10 @@ func _start_main(from_tutorial: bool) -> void:
 	count_head = 0
 	count_honk = 0
 	count_help = 0
+	count_refused = 0
+	count_knee = 0
+	count_close = 0
+	count_door = 0
 	no_paving_time = 0.0
 	last_paving_pos = Vector3(0, 0.05, 3.2)
 	on_paving_msg = true if from_tutorial else on_paving_msg
@@ -2327,31 +2561,352 @@ func _helper_say(line: String, duration: float) -> void:
 func _start_help() -> void:
 	helping = true
 	no_paving_time = 0.0
-	count_help += 1
 	var p := player.global_position
 	var fwd := -player.global_transform.basis.z
+	var side := player.global_transform.basis.x
 	for i in 3:
-		_play_sound(sound_step, p + fwd * (3.0 - i * 0.8) + player.global_transform.basis.x * 0.8, -16)
+		_play_sound(sound_step, p + fwd * (3.0 - i * 0.8) + side * 0.8, -16)
 		await _wait(0.35)
-	await _helper_say("저기요, 혹시 길을 찾고 계세요? 도와드릴까요?", 4.0)
+	# 1. 먼저 묻는다. 사양하면 물러난다.
+	await _helper_say("저기요, 혹시 길을 찾고 계세요? 도와드릴까요?", 3.5)
+	var accept: bool = await _ask_help()
+	if not accept:
+		count_refused += 1
+		_notify("나: “괜찮아요. 혼자 찾아볼게요.”", 2.5)
+		await _wait(2.5)
+		await _helper_say("네, 알겠어요. 혹시 필요하시면 불러 주세요. 조심히 가세요.", 4.0)
+		for i in 4:
+			_play_sound(sound_step, p + side * (1.0 + i * 0.9) - fwd * 0.5, -18 - i * 3)
+			await _wait(0.4)
+		_notify("발소리가 멀어진다. 그 사람은 더 따라오지 않았다.", 3.5)
+		no_paving_time = -HELP_DELAY * 0.5     # 한동안은 다시 묻지 않는다
+		helping = false
+		return
+	count_help += 1
 	_notify("나: “네… 점자블록을 놓친 것 같아요.”", 2.5)
 	await _wait(2.5)
-	await _helper_say("도와드릴게요. 제가 팔을 살짝 터치해도 될까요?", 4.0)
-	_notify("나: “네, 괜찮아요.”", 2.0)
-	await _wait(2.0)
-	await _helper_say("제 팔꿈치를 잡으세요. 제가 반 걸음 앞에서 천천히 걸을게요. 마지막으로 점자블록이 있던 곳까지 같이 가요.", 5.5)
+	# 2. 잡아끌지 않고 팔꿈치를 내어 준다.
+	await _helper_say("그럼 제 팔꿈치를 잡으세요. 손등에 제 팔을 살짝 대 드릴게요. 제가 반 걸음 앞에서 천천히 걸을게요.", 5.0)
+	_notify("손등에 닿은 팔을 따라 올라가 팔꿈치 위를 가볍게 잡았다.\n그 사람의 몸이 움직이는 방향이 팔을 통해 전해진다.", 3.5)
+	await _wait(3.5)
 	var tw := create_tween()
 	tw.tween_property(fade, "color:a", 0.85, 0.8)
 	await tw.finished
-	for i in 6:
-		_play_sound(sound_step, player.global_position + player.global_transform.basis.x * (-0.12 if i % 2 == 0 else 0.12), -18)
-		await _wait(0.45)
+	# 3. 함께 걸으며 주변 상황과 랜드마크를 말해 준다.
+	var lines := _guide_lines(p, last_paving_pos)
+	for line in lines:
+		for i in 3:
+			_play_sound(sound_step, player.global_position + side * (-0.12 if i % 2 == 0 else 0.12), -18)
+			await _wait(0.45)
+		await _helper_say(line, 3.4)
 	player.global_position = last_paving_pos
 	player.velocity = Vector3.ZERO
 	step_phase = 0.0
 	var tw2 := create_tween()
 	tw2.tween_property(fade, "color:a", 0.0, 0.8)
 	await tw2.finished
-	await _helper_say("여기 발밑부터 점자블록이 다시 이어져요. 조심히 가세요!", 4.0)
+	# 4. 떠날 때는 말로 알린다.
+	await _helper_say("다 왔어요. 지금 발밑이 점자블록이에요. 저는 이제 가 볼게요. 조심히 가세요!", 4.5)
 	_notify("나: “고맙습니다!”", 2.5)
 	helping = false
+
+
+# 함께 걸을 때 도우미가 들려주는 말: 방향, 그 구간의 랜드마크와 주의할 것, 발밑 턱
+func _guide_lines(from: Vector3, to: Vector3) -> Array[String]:
+	var lines: Array[String] = []
+	var local := player.global_transform.basis.inverse() * (to - from)
+	if local.z > 0.5 and absf(local.x) < absf(local.z):
+		lines.append("뒤쪽으로 돌아서 갈게요. 제가 먼저 돌 테니 팔만 따라오세요.")
+	elif local.x > 0.5:
+		lines.append("오른쪽으로 조금 돌아서 갈게요.")
+	elif local.x < -0.5:
+		lines.append("왼쪽으로 조금 돌아서 갈게요.")
+	else:
+		lines.append("이대로 앞으로 몇 걸음 갈게요.")
+	var z := to.z
+	if z < -55.0:
+		lines.append("오른쪽에 차가 인도 위에 올라와 서 있어요. 왼쪽으로 비켜서 갈게요.")
+	elif z < -38.0:
+		lines.append("이쯤 머리 높이에 공사 파이프가 튀어나와 있어요. 지나갈 때 말씀드릴게요.")
+	elif z < -31.0:
+		lines.append("앞이 신호등 없는 좁은 찻길이에요. 차 소리 들리는 동안은 기다렸다가 같이 건너요.")
+	elif z < -19.0:
+		lines.append("왼쪽에 공사 가림막이 있어요. 발전기 소리 나는 데가 공사 구간이에요.")
+	elif z < -9.0:
+		lines.append("오른쪽에 편의점이 있어요. 가게 앞에 진열대가 나와 있어서 살짝 돌아갈게요.")
+	else:
+		lines.append("왼쪽은 건물 벽이에요. 골목 입구 쪽이에요.")
+	lines.append("앞에 낮은 턱 있어요. 발을 살짝 들어 주세요.")
+	return lines
+
+
+# 도와드릴까요? → [네, 부탁해요] [괜찮아요]. 마우스로 고르거나 1 / 2 키.
+func _ask_help() -> bool:
+	if help_choice == null:
+		help_choice = HBoxContainer.new()
+		help_choice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+		help_choice.offset_top = -200
+		help_choice.offset_bottom = -146
+		help_choice.offset_left = -280
+		help_choice.offset_right = 280
+		help_choice.alignment = BoxContainer.ALIGNMENT_CENTER
+		help_choice.add_theme_constant_override("separation", 18)
+		for opt in [[true, "1  네, 부탁해요"], [false, "2  괜찮아요"]]:
+			var b := Button.new()
+			b.text = opt[1]
+			b.custom_minimum_size = Vector2(230, 50)
+			var yes: bool = opt[0]
+			b.pressed.connect(func(): _answer_help(yes))
+			help_choice.add_child(b)
+		hud.add_child(help_choice)
+	help_choice_open = true
+	help_choice.visible = not paused
+	_notify("지나가던 사람: “도와드릴까요?”\n어떻게 대답할까?  (1: 네, 부탁해요 · 2: 괜찮아요)", 9999.0)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var answer: bool = await help_answered
+	return answer
+
+
+func _answer_help(accept: bool) -> void:
+	if not help_choice_open:
+		return
+	help_choice_open = false
+	help_choice.visible = false
+	if not paused:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	help_answered.emit(accept)
+
+
+# ================================================================ v0.4.3: 신호등 없는 골목 찻길
+
+func _side_cars_process(delta: float) -> void:
+	side_timer -= delta
+	if side_timer <= 0.0:
+		side_timer = randf_range(9.0, 16.0)
+		if side_cars.size() < 2:
+			_spawn_side_car()
+	var p := player.global_position
+	var in_lane := p.z < SIDE_Z0 + 0.15 and p.z > SIDE_Z1 - 0.15 and absf(p.x) < SIDE_HALF_X
+	if in_lane:
+		side_last_in_lane = clock
+	for car in side_cars.duplicate():
+		var b: AnimatableBody3D = car["body"]
+		var dir: float = car["dir"]
+		var front_s := b.position.x * dir + CAR_HALF
+		var limit_s := 1000.0
+		var player_s := p.x * dir
+		# 찻길 위의 사람 앞에서는 멈춘다 (신호가 없으니 운전자가 알아서 서는 것뿐)
+		if in_lane and player_s - front_s > -0.8 and player_s - front_s < 6.0:
+			limit_s = player_s - 1.6
+			if not car["warned"]:
+				car["warned"] = true
+				count_close += 1
+				car["counted"] = true
+				_play_sound(sound_thud, b.position + Vector3(0, 0.4, 0), -16)
+				_notify("끼익— 엔진 소리가 바로 옆에서 멈춘다. 지금 찻길 한가운데다.\n차가 서서 기다리고 있다. 서둘러 건너편으로 건너자.", 5)
+		var new_front := minf(front_s + SIDE_CAR_SPEED * delta, maxf(limit_s, front_s))
+		b.position.x = (new_front - CAR_HALF) * dir
+		var moving := new_front - front_s > 0.001
+		var engine: AudioStreamPlayer3D = car["engine"]
+		engine.volume_db = -5.0 if moving else -13.0
+		# 건너자마자 등 뒤로 바짝 지나가는 차
+		if moving and not in_lane and not car["passed"] and clock - side_last_in_lane < 4.0:
+			if absf(p.x - b.position.x) < CAR_HALF + 0.8 and absf(p.z - SIDE_LANE) < 3.0:
+				car["passed"] = true
+				if not car["counted"]:
+					car["counted"] = true
+					count_close += 1
+				shake = maxf(shake, 0.2)
+				_notify("부우웅— 건너자마자 등 뒤로 차가 바짝 지나간다. 바람이 등을 훑는다.\n신호등이 없는 길에서는 차 소리만이 단서다.", 5)
+		if b.position.x * dir > SIDE_HALF_X + 3.0:
+			b.queue_free()
+			side_cars.erase(car)
+
+
+func _spawn_side_car() -> void:
+	var dir := 1.0 if randf() < 0.5 else -1.0
+	var b := AnimatableBody3D.new()
+	b.sync_to_physics = false
+	b.set_meta("label", "side_car")
+	b.set_meta("overhang", false)
+	b.position = Vector3(-(SIDE_HALF_X + 2.5) * dir, 0, SIDE_LANE)
+	var parts := [[Vector3(0,0.5,0), Vector3(3.9,0.75,1.7)], [Vector3(-0.25*dir,1.15,0), Vector3(2.0,0.55,1.5)]]
+	for part in parts:
+		var vis := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = part[1]
+		vis.mesh = bm
+		vis.position = part[0]
+		vis.material_override = _reveal_mat("side_car") if reveal_on else black_material
+		b.add_child(vis)
+		reveal_visuals.append([vis, "side_car"])
+	var shape_node := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(3.9, 1.4, 1.7)
+	shape_node.shape = shape
+	shape_node.position.y = 0.7
+	b.add_child(shape_node)
+	b.add_child(_outline_mesh(parts, 0.8))
+	var engine := AudioStreamPlayer3D.new()
+	engine.stream = sound_engine
+	engine.volume_db = -5.0
+	engine.unit_size = 4.0
+	engine.max_distance = 32.0
+	engine.position.y = 0.5
+	b.add_child(engine)
+	add_child(b)
+	engine.play()
+	side_cars.append({"body": b, "dir": dir, "engine": engine, "warned": false, "passed": false, "counted": false})
+
+
+# ================================================================ v0.4.3: 병원 현관 — 문을 놓아 버리는 사람
+
+func _door_event_check() -> void:
+	if door_event_done or hosp_door_open or helping or tutorial_active:
+		return
+	var p := player.global_position
+	if p.z < -59.6 and p.z > HOSP_DOOR_Z and absf(p.x) < 2.2:
+		_door_event()
+
+
+func _door_event() -> void:
+	door_event_done = true
+	helping = true
+	var p := player.global_position
+	var fwd := -player.global_transform.basis.z
+	var side := player.global_transform.basis.x
+	for i in 4:
+		_play_sound(sound_step, p - fwd * (1.6 - i * 0.7) + side * 0.6, -15)
+		await _wait(0.3)
+	_notify("누군가 바쁜 걸음으로 옆을 지나간다. 끼익— 유리문이 열리는 소리.\n열린 문틈으로 따라 들어가려는 순간—", 3.0)
+	_play_sound(sound_door, Vector3(0, 1.2, HOSP_DOOR_Z), -6)
+	await _wait(1.2)
+	var target := Vector3(clampf(p.x, -0.9, 0.9), p.y, HOSP_DOOR_Z + 0.36)
+	var tw := create_tween()
+	tw.tween_property(player, "global_position", target, 0.7)
+	await tw.finished
+	# 앞사람이 내가 다 들어오기도 전에 문을 놓았다
+	_play_sound(sound_door, Vector3(0, 1.2, HOSP_DOOR_Z), -2)
+	_play_sound(sound_thud, target + Vector3(0, 1.3, -0.3), -2)
+	count_door += 1
+	stun = 0.9
+	shake = 0.45
+	flash.color = Color(1, 1, 1, 0.5)
+	_pulse(Vector3(target.x, 1.3, HOSP_DOOR_Z), HEAD_TOUCH, 0.0)
+	player.global_position = target + Vector3(0, 0, 0.35)
+	_notify("쾅— 앞사람이 내가 다 들어오기도 전에 문을 놓았다. 되돌아온 유리문에 어깨와 이마를 부딪혔다.\n문이 닫히는 것은 볼 수 없다. 손잡이를 더듬어 직접 밀고 들어가자. (%s)" % _k("interact"), 8)
+	await _wait(0.9)
+	helping = false
+
+
+func _push_hosp_door() -> void:
+	if hosp_door_open:
+		return
+	if not door_event_done:
+		_door_event()
+		return
+	hosp_door_open = true
+	_play_sound(sound_door, Vector3(0, 1.2, HOSP_DOOR_Z), -6)
+	for n in hosp_door_nodes:
+		n.queue_free()
+	hosp_door_nodes.clear()
+	_notify("손잡이를 찾아 유리문을 밀었다. 한 손으로 문을 붙잡은 채, 몸이 다 들어갈 때까지 천천히 지나간다.", 6)
+
+
+# 편의점 출입문 차임: 지나가는 손님이 문을 열 때마다 '딩동'. 길을 기억하는 소리 단서가 된다.
+func _shop_chime(delta: float) -> void:
+	shop_clock -= delta
+	if shop_clock > 0.0:
+		return
+	shop_clock = randf_range(9.0, 15.0)
+	var p := player.global_position
+	if p.x < 40.0 and p.z > -30.0 and p.z < 6.0 and not tutorial_active:
+		_play_sound(sound_chime, Vector3(7.0, 2.1, -15.0), -14, 22)
+
+
+# ================================================================ v0.4.3: 다시보기 — 화면 보기
+
+func _reveal_mat(label: String) -> StandardMaterial3D:
+	if reveal_mats.has(label):
+		return reveal_mats[label]
+	var colors := {
+		"ground": Color(0.46, 0.46, 0.47), "wall": Color(0.62, 0.52, 0.44), "facade": Color(0.82, 0.82, 0.8),
+		"barrier": Color(0.92, 0.92, 0.9), "box": Color(0.6, 0.45, 0.28), "pole": Color(0.55, 0.56, 0.58),
+		"bench": Color(0.5, 0.33, 0.2), "overhang_sign": Color(0.85, 0.22, 0.2), "overhang_pipe": Color(0.75, 0.75, 0.78),
+		"scooter": Color(0.15, 0.62, 0.38), "generator": Color(0.95, 0.62, 0.12), "signal_pole": Color(0.45, 0.47, 0.5),
+		"door": Color(0.3, 0.3, 0.32), "desk": Color(0.55, 0.4, 0.28), "elev_wall": Color(0.72, 0.74, 0.77),
+		"elev_panel": Color(0.18, 0.18, 0.2), "elev_door": Color(0.66, 0.68, 0.71), "room_door": Color(0.58, 0.43, 0.3),
+		"rail": Color(0.75, 0.75, 0.75), "home_door": Color(0.62, 0.56, 0.5), "tut_beam": Color(0.6, 0.6, 0.62),
+		"tut_door": Color(0.55, 0.75, 0.85), "hosp_door": Color(0.55, 0.75, 0.85), "bollard": Color(0.95, 0.78, 0.12),
+		"shop": Color(0.25, 0.55, 0.8), "display": Color(0.35, 0.6, 0.32), "parked_car": Color(0.9, 0.9, 0.93),
+		"side_car": Color(0.22, 0.32, 0.72), "car0": Color(0.75, 0.12, 0.12), "car1": Color(0.85, 0.85, 0.88),
+		"car2": Color(0.15, 0.15, 0.17), "car3": Color(0.25, 0.45, 0.7), "asphalt": Color(0.2, 0.2, 0.22),
+		"paint": Color(0.95, 0.95, 0.95), "paving": Color(0.98, 0.8, 0.1),
+	}
+	var m := StandardMaterial3D.new()
+	m.albedo_color = colors.get(label, Color(0.4, 0.4, 0.42))
+	m.roughness = 0.85
+	if label in ["tut_door", "hosp_door", "shop"]:
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color.a = 0.55
+	reveal_mats[label] = m
+	return m
+
+
+func _flat(rect: Rect2, y: float, label: String) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(rect.size.x, 0.01, rect.size.y)
+	mi.mesh = bm
+	mi.position = Vector3(rect.position.x + rect.size.x * 0.5, y, rect.position.y + rect.size.y * 0.5)
+	mi.material_override = _reveal_mat(label)
+	reveal_root.add_child(mi)
+
+
+# 화면 보기에서만 보이는 것: 차도 아스팔트, 횡단보도 흰 칠, 노란 점자블록, 조명
+func _build_reveal() -> void:
+	reveal_root = Node3D.new()
+	add_child(reveal_root)
+	_flat(Rect2(-30, ROAD_Z1, 60, ROAD_Z0 - ROAD_Z1), 0.004, "asphalt")
+	_flat(Rect2(-SIDE_HALF_X, SIDE_Z1, SIDE_HALF_X * 2, SIDE_Z0 - SIDE_Z1), 0.004, "asphalt")
+	var x := -1.9
+	while x < 1.9:
+		_flat(Rect2(x, ROAD_Z1 + 0.3, 0.45, ROAD_Z0 - ROAD_Z1 - 0.6), 0.008, "paint")
+		x += 0.9
+	x = 3.6
+	while x < 5.8:
+		_flat(Rect2(x, SIDE_Z1 + 0.25, 0.4, SIDE_Z0 - SIDE_Z1 - 0.5), 0.008, "paint")
+		x += 0.8
+	for r in paving_rects:
+		_flat(r, 0.012, "paving")
+	for r in warning_rects:
+		_flat(r, 0.014, "paving")
+	reveal_light = DirectionalLight3D.new()
+	reveal_light.rotation_degrees = Vector3(-55, 35, 0)
+	reveal_light.light_energy = 0.9
+	add_child(reveal_light)
+
+
+func _set_reveal(on: bool) -> void:
+	reveal_on = on
+	if on and reveal_root == null:
+		_build_reveal()
+	if reveal_root:
+		reveal_root.visible = on
+		reveal_light.visible = on
+	world_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR if on else Environment.AMBIENT_SOURCE_DISABLED
+	world_env.ambient_light_color = Color(0.75, 0.78, 0.85)
+	world_env.ambient_light_energy = 0.75
+	world_env.background_color = Color(0.05, 0.07, 0.13) if on else Color.BLACK
+	var alive: Array = []
+	for entry in reveal_visuals:
+		var mi: MeshInstance3D = entry[0]
+		if not is_instance_valid(mi):
+			continue
+		alive.append(entry)
+		mi.material_override = _reveal_mat(str(entry[1])) if on else black_material
+	reveal_visuals = alive
+	if on:
+		_notify("화면 보기 — 지금까지 지팡이로 더듬던 길의 실제 모습이다. (%s: 끄기)" % _k("toggle_view"), 4)
+	else:
+		_notify("화면 끄기 — 다시 지팡이 끝과 희미한 울림만 남는다.", 3)

@@ -5,14 +5,14 @@ extends Node
 
 const MAIN_MENU := "res://menu/main_menu.tscn"
 const GITHUB_URL := "https://github.com/norussi/-_project_dandelion"
-const VERSION := "0.4.2"
+const VERSION := "0.4.3"
 
 const STAGES := [
 	{
 		"id": "visual_walk",
 		"title": "시각장애 보행",
 		"subtitle": "흰 지팡이로 병원 503호까지",
-		"description": "밤 11시 47분, 병원에서 걸려 온 전화. 집 앞 복도에서 지팡이 연습을 마치고, 흰 지팡이와 소리에 의지해 공사 중인 골목과 큰길 횡단보도를 지나 엘리베이터를 타고 503호까지 걸어갑니다.",
+		"description": "밤 11시 47분, 병원에서 걸려 온 전화. 집 앞 복도에서 지팡이 연습을 마치고, 흰 지팡이와 소리에 의지해 공사 중인 골목과 신호등 없는 찻길, 큰길 횡단보도를 지나 엘리베이터를 타고 503호까지 걸어갑니다.",
 		"tags": ["1인칭 3D", "헤드폰 권장"],
 		"scene": "res://stages/visual_walk/visual_walk.tscn",
 		"preview": "cane",
@@ -32,6 +32,9 @@ const STAGES := [
 
 ## 모드 선택 화면에서 돌아올 때 그 화면을 바로 열어 줄지
 var return_to_mode_select := false
+## 시각장애 보행: 엔딩 후 '다시보기'로 다시 시작했는지 (화면 보기 토글을 쓸 수 있다).
+## 다시 시작(R)해도 유지되고, 메뉴에서 체험을 새로 고르면 꺼진다.
+var visual_walk_replay := false
 
 
 func start_stage(id: String) -> void:
@@ -54,6 +57,7 @@ func open_github() -> void:
 
 
 func _leave_scene() -> void:
+	visual_walk_replay = false
 	get_tree().paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Settings.stop_speaking()

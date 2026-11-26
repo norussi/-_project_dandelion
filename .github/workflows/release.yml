@@ -1,0 +1,197 @@
+# 민들레 자동 빌드·릴리스
+#
+# - main에 올라온 Dandelion/project.godot의 버전(config/version)에 해당하는 릴리스가 아직 없으면
+#   Windows / Linux / macOS 실행 파일 3개를 만들어 GitHub 릴리스 vX.Y.Z로 올린다. 태그도 함께 만든다.
+# - 이미 같은 버전의 릴리스가 있으면 아무것도 하지 않는다. (문서만 고친 커밋 등)
+# - main으로 가는 PR에서는 3개 플랫폼 빌드만 해 보고, 결과를 이 실행의 Artifacts로 남긴다. (릴리스 X)
+# - Actions 탭의 "Run workflow" 버튼으로 직접 실행할 수도 있다.
+#
+# 새 버전을 낼 때 할 일: project.godot의 config/version과 core/game.gd의 VERSION을 같이 올리고,
+# CHANGELOG.md에 "## [X.Y.Z] - 날짜" 항목을 쓴 뒤 main에 병합한다. 릴리스 설명은 그 항목에서 가져온다.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dandelion/**"
+      - "CHANGELOG.md"
+      - ".github/workflows/release.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Dandelion/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: "4.7.2"
+  GODOT_STATUS: "stable"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 버전 확인
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^config\/version="\(.*\)"$/\1/p' Dandelion/project.godot)
+          game=$(sed -n 's/^const VERSION := "\(.*\)"$/\1/p' Dandelion/core/game.gd)
+          if [ -z "$version" ]; then echo "::error::project.godot에서 config/version을 찾지 못했습니다."; exit 1; fi
+          if [ "$version" != "$game" ]; then
+            echo "::error::버전이 서로 다릅니다. project.godot=$version, core/game.gd VERSION=$game"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          # 릴리스는 main에 push(또는 수동 실행)했을 때만, 그리고 그 버전 릴리스가 아직 없을 때만 만든다.
+          publish=false
+          if [ "${{ github.event_name }}" != "pull_request" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            if gh release view "v$version" >/dev/null 2>&1; then
+              echo "v$version 릴리스가 이미 있어 빌드와 릴리스를 건너뜁니다."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              publish=true
+            fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "버전 $version, 릴리스 만들기: $publish"
+
+      - name: Godot와 내보내기 템플릿 캐시
+        if: steps.ver.outputs.skip != 'true'
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_STATUS }}-win-linux-macos
+
+      - name: Godot 설치
+        if: steps.ver.outputs.skip != 'true' && steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_STATUS}"
+          mkdir -p ~/godot
+          curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64 ~/godot/godot
+          # 템플릿 묶음(약 1.2GB)에서 필요한 3개 플랫폼 파일만 꺼낸다
+          curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_export_templates.tpz"
+          tdir=~/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}
+          mkdir -p "$tdir"
+          unzip -j /tmp/templates.tpz \
+            templates/version.txt \
+            templates/windows_release_x86_64.exe \
+            templates/linux_release.x86_64 \
+            templates/macos.zip \
+            -d "$tdir"
+          rm /tmp/godot.zip /tmp/templates.tpz
+
+      - name: 내보내기 설정에 버전 넣기
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          # Windows 파일 버전은 숫자 4개 (0.4.3 → 0.4.3.0)
+          sed -i "s/^application\/file_version=.*/application\/file_version=\"$v.0\"/;
+                  s/^application\/product_version=.*/application\/product_version=\"$v.0\"/;
+                  s/^application\/short_version=.*/application\/short_version=\"$v\"/;
+                  s/^application\/version=.*/application\/version=\"$v\"/" Dandelion/export_presets.cfg
+          grep -E "file_version|product_version|short_version|^application/version" Dandelion/export_presets.cfg
+
+      - name: 빌드 (Windows / Linux / macOS)
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          g=~/godot/godot
+          mkdir -p build/windows build/linux build/macos
+          # 처음 한 번 리소스를 가져와(.godot 폴더 생성) 둬야 내보내기가 된다
+          $g --headless --path Dandelion --import || true
+          $g --headless --path Dandelion --export-release "Windows Desktop" ../build/windows/Dandelion.exe
+          $g --headless --path Dandelion --export-release "Linux" ../build/linux/Dandelion.x86_64
+          $g --headless --path Dandelion --export-release "macOS" ../build/macos/Dandelion.zip
+          for f in build/windows/Dandelion.exe build/linux/Dandelion.x86_64 build/macos/Dandelion.zip; do
+            [ -s "$f" ] || { echo "::error::$f 가 만들어지지 않았습니다."; exit 1; }
+          done
+          ls -la build/*
+
+      - name: 릴리스 파일 정리
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          mkdir -p dist
+          cp build/windows/Dandelion.exe "dist/Dandelion-v$v-windows.exe"
+          # Linux 실행 권한이 유지되도록 tar.gz로 묶는다
+          chmod +x build/linux/Dandelion.x86_64
+          tar -czf "dist/Dandelion-v$v-linux.tar.gz" -C build/linux Dandelion.x86_64
+          cp build/macos/Dandelion.zip "dist/Dandelion-v$v-macos.zip"
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          ls -la dist
+
+      - name: 빌드 결과 남기기 (Artifacts)
+        if: steps.ver.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dandelion-v${{ steps.ver.outputs.version }}
+          path: dist/
+          retention-days: 14
+
+      - name: 릴리스 설명 만들기
+        if: steps.ver.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          # CHANGELOG.md에서 "## [X.Y.Z]" 부터 다음 "## [" 직전까지
+          awk -v ver="$v" '
+            $0 ~ "^## \\[" ver "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "CHANGELOG.md에 [$v] 항목이 없습니다." > notes.md
+          fi
+          cat >> notes.md <<EOF
+
+          ---
+
+          ## 내려받기
+
+          | 운영체제 | 파일 | 실행 방법 |
+          |---|---|---|
+          | Windows 10/11 (64비트) | \`Dandelion-v$v-windows.exe\` | 더블클릭. “Windows의 PC 보호” 창이 뜨면 **추가 정보 → 실행** |
+          | macOS 11 이상 (Intel·Apple Silicon) | \`Dandelion-v$v-macos.zip\` | 압축을 풀고 앱을 **응용 프로그램**으로 옮긴 뒤, 처음 한 번은 **Control-클릭 → 열기**. 그래도 막히면 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기** |
+          | Linux (x86_64) | \`Dandelion-v$v-linux.tar.gz\` | \`tar -xzf Dandelion-v$v-linux.tar.gz && ./Dandelion.x86_64\` |
+
+          서명·공증하지 않은 실행 파일이라 처음 실행할 때 경고가 나옵니다. 헤드폰을 권장합니다.
+          파일이 온전한지 확인하려면 \`SHA256SUMS.txt\`와 비교하세요.
+
+          이 게임은 [Godot Engine](https://godotengine.org/license/) (MIT 라이선스)으로 만들었습니다.
+          EOF
+          cat notes.md
+
+      - name: GitHub 릴리스 올리기
+        if: steps.ver.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.ver.outputs.tag }}"
+          gh release create "$tag" dist/* \
+            --title "$tag" \
+            --notes-file notes.md \
+            --target "${{ github.sha }}"

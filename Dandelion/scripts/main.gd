@@ -26,6 +26,8 @@ var _t_smoke := 0.0
 var _t_smoke_cover := 0.0
 var _elevator_tried := false
 var _hot_checked := false
+var _backdraft_hit := false     # 뜨거운 문을 열어 불길이 덮쳤다
+var _flash := 0.0              # 백드래프트 때 화면이 주황빛으로 번쩍임 (1 → 0)
 var _hints := {}
 var _stand_smoke_time := 0.0
 var _f1_reached := false      # 1층까지 내려가 출구가 막힌 것을 확인함
@@ -223,6 +225,7 @@ func _hint(id: String, text: String, dur: float) -> void:
 
 func _update_fx(delta: float) -> void:
 	_blur_pulse = maxf(0.0, _blur_pulse - delta * 0.8)
+	_flash = maxf(0.0, _flash - delta * 0.6)
 	var choke := 1.0 - breath / 100.0
 	# 완강기 하강 연출이 시작되면(창밖 맑은 공기) 숨이 차서 흐려진 시야가 천천히 원래대로 돌아온다
 	var want_clear := 1.0 if _state in ["descending", "escaped"] else 0.0
@@ -230,7 +233,7 @@ func _update_fx(delta: float) -> void:
 	var dim := 1.0 - smoothstep(0.0, 1.0, _view_clear)
 	_fx.set_shader_parameter("blur", clampf(_density * 0.25 + choke * 0.6 + _blur_pulse, 0.0, 1.0) * dim)
 	_fx.set_shader_parameter("vignette", lerpf(0.2, clampf(0.2 + choke * 0.8, 0.0, 1.0), dim))
-	_fx.set_shader_parameter("tint", Color(1.0, 0.35, 0.05, _heat * 0.6 * dim))
+	_fx.set_shader_parameter("tint", Color(1.0, 0.35, 0.05, maxf(_heat * 0.6, _flash * 0.85) * dim))
 	# 소매 (코와 입 막기)
 	var target := -150.0 if player.covering else 40.0
 	_sleeve.offset_top = lerpf(_sleeve.offset_top, target, clampf(delta * 10.0, 0.0, 1.0))
@@ -258,6 +261,9 @@ func _handle_result(res: Dictionary) -> void:
 		"descend":
 			_start_descent(res.get("window"))
 			return
+		"backdraft":
+			_backdraft(res.get("door"))
+			return
 		"alarm":
 			_ring_alarm()
 			return
@@ -272,6 +278,53 @@ func _handle_result(res: Dictionary) -> void:
 			Sfx.play("beep", -6.0)
 	if res.get("msg", "") != "":
 		_show_message(res.msg, 4.0)
+
+
+## 뜨거운 문을 억지로 열었을 때: 산소가 모자라던 방에 공기가 들어가 불길이 폭발하듯 쏟아져 나온다.
+func _backdraft(door: StaticBody3D) -> void:
+	_backdraft_hit = true
+	_hot_checked = true
+	var fx: Node3D = preload("res://parts/backdraft.gd").new()
+	door.get_parent().add_child(fx)
+	fx.global_transform = door.global_transform
+	# 방 안에서 크게 번진 불이 그대로 남는다 (가까이 가면 뜨겁다).
+	# 문 뒤에 공간이 있으면 방 안에, 문 뒤가 바로 벽이면(모형이 없는 곳) 문간에 둔다.
+	var fire: Node3D = preload("res://parts/fire_source.gd").new()
+	fire.fire_size = 1.1
+	fire.heat_radius = 2.2
+	door.get_parent().add_child(fire)
+	var inside := PhysicsRayQueryParameters3D.create(door.to_global(Vector3(0, 1.0, 0.3)), door.to_global(Vector3(0, 1.0, -1.2)))
+	inside.exclude = [door.get_rid(), player.get_rid()]
+	var room := get_world_3d().direct_space_state.intersect_ray(inside).is_empty()
+	fire.global_position = door.to_global(Vector3(0, 0, -1.0 if room else 0.3))
+	Sfx.play("whoosh", 2.0)
+	player.shake(1.6)
+	_blur_pulse = 1.0
+	_flash = 1.0
+	breath = maxf(breath - 55.0, 0.0)
+	# 불길에 밀려 문에서 떨어진다: 문 앞 방향으로, 벽에 닿기 전까지 최대 1.5m
+	player.controls_enabled = false
+	player.frozen = true
+	player.covering = false
+	var away: Vector3 = door.global_basis.z
+	away.y = 0.0
+	away = away.normalized()
+	var from: Vector3 = player.global_position + Vector3(0, 0.6, 0)
+	var q := PhysicsRayQueryParameters3D.create(from, from + away * 2.0)
+	q.exclude = [player.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	var dist := 1.5
+	if not hit.is_empty():
+		dist = clampf(from.distance_to(hit["position"]) - 0.4, 0.0, 1.5)
+	var tw := create_tween()
+	tw.tween_property(player, "global_position", player.global_position + away * dist, 0.35).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.parallel().tween_property(player.camera, "rotation:x", 0.35, 0.2)
+	tw.tween_property(player.camera, "rotation:x", -0.05, 0.6).set_trans(Tween.TRANS_SINE)
+	_show_message("펑!! 문을 여는 순간 불길이 확 덮쳤다! (백드래프트)\n산소가 모자라던 방에 공기가 들어가자 불이 폭발하듯 번졌다.\n뜨거운 문은 절대 열면 안 된다!", 5.5)
+	await get_tree().create_timer(1.3).timeout
+	player.frozen = false
+	if _state == "play":
+		player.controls_enabled = true
 
 
 func _ring_alarm() -> void:
@@ -405,13 +458,17 @@ func _show_end(success: bool) -> void:
 	else:
 		_end_title.text = "의식을 잃었습니다"
 		t += "연기를 너무 많이 마셨습니다.\n"
+		if _backdraft_hit:
+			t += "뜨거운 문을 연 순간 쏟아져 나온 불길과 열기가 숨을 앗아 갔습니다.\n"
 		t += "화재 사망자의 상당수는 불길이 아니라 연기 때문에 목숨을 잃습니다.\n\n"
 	t += "[b]이번 대피 돌아보기[/b]\n"
 	t += "%s 비상벨을 눌러 화재를 알렸다\n" % (ok if _alarm_on else no)
 	t += "%s 자세를 낮춰 이동했다 (%d%%)\n" % [ok if low_pct >= 60 else no, low_pct]
 	t += "%s 코와 입을 막았다 (%d%%)\n" % [ok if cover_pct >= 50 else no, cover_pct]
 	t += "%s 엘리베이터를 타려 하지 않았다\n" % (no if _elevator_tried else ok)
-	if _hot_checked:
+	if _backdraft_hit:
+		t += "%s 뜨거운 문을 열어 불길이 덮쳤다 (백드래프트)\n" % no
+	elif _hot_checked:
 		t += "%s 뜨거운 문을 열지 않고 다른 길을 찾았다\n" % ok
 	t += "%s 1층까지 내려가 출구 상황을 확인했다\n" % (ok if _f1_reached else no)
 	t += "%s 완강기를 지지대에 고정하고 로프를 내린 뒤 벨트를 입고 내려왔다\n" % (ok if (_desc_log.has("desc_hook") and _desc_log.has("desc_rope") and _desc_log.has("desc_belt") and success) else no)
@@ -419,7 +476,7 @@ func _show_end(success: bool) -> void:
 	t += "1. \"불이야!\" 크게 외치고 비상벨(발신기)을 누릅니다.\n"
 	t += "2. 젖은 수건이나 옷소매로 코와 입을 막고, 자세를 낮춰 이동합니다.\n"
 	t += "3. 초록색 유도등을 따라 계단으로 대피합니다. 엘리베이터는 타지 않습니다.\n"
-	t += "4. 문을 열기 전 손등으로 손잡이를 만져 보고, 뜨거우면 열지 않습니다.\n"
+	t += "4. 문을 열기 전 손등으로 손잡이를 만져 보고, 뜨거우면 열지 않습니다.\n    닫힌 방에 공기가 들어가면 불길이 폭발하듯 덮칩니다(백드래프트).\n"
 	t += "5. 계단이 불길이나 연기로 막혔다면 창가의 완강기(피난사다리)를 씁니다.\n    ①지지대에 고리를 걸어 고정 ②아래를 확인하고 로프를 창밖으로 내림\n    ③벨트를 겨드랑이 밑 가슴 위에 걸고 조임 ④창밖으로 나가 벽을 밀며 내려감\n"
 	t += "6. 밖으로 대피한 뒤 119에 신고합니다.\n\n"
 	t += "[color=#777777][R] 다시 하기[/color]"

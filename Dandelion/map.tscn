@@ -2322,6 +2322,11 @@ use_collision = true
 size = Vector3(14.5, 3, 0.2)
 material = ExtResource("3_4on3e")
 
+[node name="DoorHole_S02" type="CSGBox3D" parent="Floor3/Structure/CorridorWall_S1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, -0.45, 0)
+operation = 2
+size = Vector3(1, 2.1, 0.4)
+
 [node name="CorridorWall_S2" type="CSGBox3D" parent="Floor3/Structure" unique_id=233257953]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 1.5, 8)
 use_collision = true
@@ -2548,6 +2553,10 @@ material = ExtResource("21_wlow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.75, 0.475, 8.105)
 size = Vector3(14.5, 0.95, 0.01)
 material = ExtResource("21_wlow")
+[node name="DoorHole_S02" type="CSGBox3D" parent="Floor3/Structure/SouthWainscot_S1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.575, 0)
+operation = 2
+size = Vector3(1, 2.1, 0.4)
 [node name="SouthWainscot_S2" type="CSGBox3D" parent="Floor3/Structure"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 0.475, 8.105)
 size = Vector3(6, 0.95, 0.01)
@@ -3264,6 +3273,7 @@ plate_text = "3-1"
 [node name="Door_S02" type="StaticBody3D" parent="Floor3/Doors" unique_id=2013212208]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 8.13)
 script = ExtResource("9_3mr0t")
+kind = 1
 plate_text = "3-2"
 
 [node name="Door_S03" type="StaticBody3D" parent="Floor3/Doors" unique_id=982902808]

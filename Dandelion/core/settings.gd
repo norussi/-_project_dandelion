@@ -33,6 +33,7 @@ const ACTIONS := [
 	["tap", "발 앞 짚기", "key:%d" % KEY_SPACE, ["visual_walk"]],
 	["phone", "휴대폰 음성 안내", "key:%d" % KEY_Q, ["visual_walk"]],
 	["restart_game", "처음부터 다시 (일시정지 중)", "key:%d" % KEY_R, ["visual_walk"]],
+	["toggle_view", "화면 보기 켜고 끄기 (엔딩 후 다시보기)", "key:%d" % KEY_V, ["visual_walk"]],
 	# 화재 대피
 	["crouch_toggle", "자세 낮추기 켜고 끄기", "key:%d" % KEY_C, ["fire_escape"]],
 	["cover", "코와 입 막기 (누르고 있기)", "key:%d" % KEY_F, ["fire_escape"]],

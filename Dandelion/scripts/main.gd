@@ -55,6 +55,8 @@ var _end_body: RichTextLabel
 func _ready() -> void:
 	randomize()
 	Descender.reset()
+	# 맵(완강기 부분들)이 먼저 준비되므로, 단계를 처음으로 돌린 뒤 겉모습도 다시 맞춘다
+	get_tree().call_group("descender_parts", "_refresh_instant")
 	env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = _smoke_color
@@ -91,6 +93,8 @@ func _process(delta: float) -> void:
 		_update_prompt()
 		_update_hints(delta)
 		_update_mission()
+	elif _state == "installing":
+		_update_mission()   # 완강기 설치 동작 중: 호흡은 줄지 않고 목표만 갱신한다
 	elif _state == "descending":
 		_descent_t += delta
 		player.camera.rotation.z = sin(_descent_t * 1.6) * 0.035   # 로프에 매달려 살짝 흔들림
@@ -192,9 +196,10 @@ func _update_hints(delta: float) -> void:
 
 
 const _STEPS := [
-	"4층 복도 창가에서 완강기함을 찾는다",
+	"4층 복도 창가에서 완강기함을 열어 완강기를 찾는다",
 	"완강기를 꺼낸다",
-	"창문을 열고, 지지대에 완강기 고리를 건다",
+	"창문을 열고, 창문 아래 지지대를 세워 창밖으로 펼친다",
+	"펼친 지지대 끝 고리에 완강기를 걸고 잠근다",
 	"아래를 확인하고 로프를 창밖으로 던진다",
 	"벨트를 입고 가슴 위로 조인다",
 	"창틀에 걸터앉아 내려간다",
@@ -209,10 +214,8 @@ func _update_mission() -> void:
 		_objective.text = "목표: 1층 출구로 대피한다"
 		return
 	var step: String = _STEPS[Descender.stage]
-	if Descender.stage == 3 and not Descender.window_open:
-		step = "창문을 열고, 아래를 확인하며 로프를 던진다"
-	elif Descender.stage == 2 and not Descender.window_open:
-		step = "창문을 열고, 지지대에 완강기 고리를 건다"
+	if Descender.stage == 2 and Descender.window_open:
+		step = "창문 아래 지지대를 세워 창밖으로 펼친다"
 	_objective.text = "목표: 1층 출구가 불길로 막혔다 → 4층 완강기로 탈출\n  · " + step
 
 
@@ -278,6 +281,39 @@ func _handle_result(res: Dictionary) -> void:
 			Sfx.play("beep", -6.0)
 	if res.get("msg", "") != "":
 		_show_message(res.msg, 4.0)
+	if res.has("anim"):
+		_play_install(res.anim, res.get("look", Vector3.INF), res.get("stand", Vector3.INF))
+
+
+## 완강기 설치 동작: 그동안 조작을 막고, 작업하기 좋은 자리(stand)로 다가가 시선을 작업하는 곳(look)으로 돌린다.
+## 동작이 나오는 동안에는 호흡이 줄어들지 않는다. 창가에서 작업하도록 잠시 일어섰다가, 끝나면 원래 자세로 돌아간다.
+func _play_install(duration: float, look: Vector3, stand: Vector3) -> void:
+	_state = "installing"
+	player.controls_enabled = false
+	player.covering = false
+	_prompt.text = ""
+	var was_crouching: bool = player.crouching
+	if stand != Vector3.INF:
+		player.crouching = false
+	var cam_from: Vector3 = player.camera.global_position
+	if stand != Vector3.INF:
+		cam_from.y = player.global_position.y + preload("res://scripts/player.gd").STAND_H
+	if stand != Vector3.INF:
+		var dest := Vector3(stand.x, player.global_position.y, stand.z)
+		cam_from += dest - player.global_position
+		create_tween().tween_property(player, "global_position", dest, 0.35).set_trans(Tween.TRANS_SINE)
+	if look != Vector3.INF:
+		var to: Vector3 = look - cam_from
+		var yaw := atan2(-to.x, -to.z)
+		var pitch := atan2(to.y, Vector2(to.x, to.z).length())
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(player, "rotation:y", player.rotation.y + angle_difference(player.rotation.y, yaw), 0.35).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(player.camera, "rotation:x", clampf(pitch, -1.35, 1.2), 0.35).set_trans(Tween.TRANS_SINE)
+	await get_tree().create_timer(duration).timeout
+	if _state == "installing":
+		_state = "play"
+		player.controls_enabled = true
+		player.crouching = was_crouching
 
 
 ## 뜨거운 문을 억지로 열었을 때: 산소가 모자라던 방에 공기가 들어가 불길이 폭발하듯 쏟아져 나온다.
@@ -471,7 +507,7 @@ func _show_end(success: bool) -> void:
 	elif _hot_checked:
 		t += "%s 뜨거운 문을 열지 않고 다른 길을 찾았다\n" % ok
 	t += "%s 1층까지 내려가 출구 상황을 확인했다\n" % (ok if _f1_reached else no)
-	t += "%s 완강기를 지지대에 고정하고 로프를 내린 뒤 벨트를 입고 내려왔다\n" % (ok if (_desc_log.has("desc_hook") and _desc_log.has("desc_rope") and _desc_log.has("desc_belt") and success) else no)
+	t += "%s 지지대를 펼쳐 완강기를 고정하고 로프를 내린 뒤 벨트를 입고 내려왔다\n" % (ok if (_desc_log.has("desc_arm") and _desc_log.has("desc_hook") and _desc_log.has("desc_rope") and _desc_log.has("desc_belt") and success) else no)
 	t += "\n[b]실제 화재가 났을 때[/b]\n"
 	t += "1. \"불이야!\" 크게 외치고 비상벨(발신기)을 누릅니다.\n"
 	t += "2. 젖은 수건이나 옷소매로 코와 입을 막고, 자세를 낮춰 이동합니다.\n"

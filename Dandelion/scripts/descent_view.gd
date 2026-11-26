@@ -36,6 +36,7 @@ const FOOT_OFFSET := [0.11, -0.11]   # 두 발이 벽을 번갈아 디디도록 
 var player: Node3D
 var wall_out := 0.2            # 바깥 벽면의 Z
 var ground_y := -12.65         # 지면의 Y
+var rope_top := Vector3.INF    # 지지대에 매단 완강기(릴)에서 로프가 나오는 곳 (없으면 창틀 위로 지나는 로프)
 
 var t := 0.0
 var landed := false
@@ -77,6 +78,8 @@ func begin(p: Node3D, win: Node3D) -> void:
 	out.y = 0.0
 	out = out.normalized()
 	global_transform = Transform3D(Basis(Vector3.UP.cross(out), Vector3.UP, out), win.global_position)
+	if win is Descender:
+		rope_top = to_local(win.to_global(Descender.ROPE_TOP))
 	_measure()
 	_build()
 	var pl := to_local(player.global_position)
@@ -349,11 +352,15 @@ func _apply() -> void:
 		n["elbow%d" % i].position = arm[0]
 		var fdir: Vector3 = (arm[1] - arm[0]).normalized()
 		n["hand%d" % i].position = arm[1] + fdir * 0.03
-	# 로프: 창틀 위를 지나 가슴 고리까지
-	var sill_a := Vector3(0, SILL_Y + 0.015, -0.02)
-	var sill_b := Vector3(0, SILL_Y + 0.015, wall_out + 0.02)
-	_seg(n["rope_sill"], sill_a, sill_b)
-	_seg(n["rope"], Vector3(0, SILL_Y + 0.015, clampf(ring.z, sill_a.z, sill_b.z)), ring)
+	# 로프: 창밖으로 펼친 지지대 끝의 완강기(릴)에서 가슴 고리까지
+	if rope_top != Vector3.INF:
+		n["rope_sill"].visible = false
+		_seg(n["rope"], rope_top, ring)
+	else:   # 지지대가 없으면 창틀 위를 지나 가슴 고리까지
+		var sill_a := Vector3(0, SILL_Y + 0.015, -0.02)
+		var sill_b := Vector3(0, SILL_Y + 0.015, wall_out + 0.02)
+		_seg(n["rope_sill"], sill_a, sill_b)
+		_seg(n["rope"], Vector3(0, SILL_Y + 0.015, clampf(ring.z, sill_a.z, sill_b.z)), ring)
 	n["fill"].position = pel + Vector3(1.6, 1.0, 2.2)
 
 

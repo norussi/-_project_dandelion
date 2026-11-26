@@ -14,6 +14,7 @@ func _ready() -> void:
 	_streams["step"] = _make_step()
 	_streams["door"] = _make_door()
 	_streams["beep"] = _make_beep()
+	_streams["whoosh"] = _make_whoosh()
 
 
 func get_stream(n: String) -> AudioStream:
@@ -146,6 +147,25 @@ func _make_beep() -> AudioStreamWAV:
 	for i in n:
 		var t := float(i) / RATE
 		s[i] = sin(TAU * 880.0 * t) * minf(1.0, (n - i) / 300.0) * 0.5
+	return _to_wav(s, false)
+
+
+## 백드래프트: 낮게 울리는 "쿵" 하는 충격과 함께 불길이 "화르륵" 쏟아져 나오는 소리
+func _make_whoosh() -> AudioStreamWAV:
+	var n := int(2.2 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var low := 0.0
+	var mid := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var noise := randf_range(-1.0, 1.0)
+		low += (noise - low) * 0.02          # 낮은 웅웅거림
+		mid += (noise - mid) * 0.18          # 거친 바람 소리
+		var attack := minf(t / 0.04, 1.0)
+		var body := attack * exp(-t * 1.6)
+		var thump := sin(TAU * (55.0 - 25.0 * t) * t) * exp(-t * 6.0)
+		s[i] = (low * 3.5 * body + mid * 0.9 * body * (0.6 + 0.4 * sin(t * 31.0)) + thump * 0.9)
 	return _to_wav(s, false)
 
 

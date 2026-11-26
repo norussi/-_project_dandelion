@@ -208,6 +208,8 @@ var count_knee := 0
 var count_door := 0
 var hosp_door_nodes: Array[Node] = []
 var hosp_door_open := false
+var hosp_hinge: Node3D
+var hosp_door_shape: CollisionShape3D
 var door_event_done := false
 var shop_clock := 0.0
 var noise_duck := 0.0
@@ -401,9 +403,14 @@ func _build_world() -> void:
 	# 인도 위 불법 주차 차량 (점자블록 위까지 걸쳐 있다)
 	_box(Vector3(1.8,0.55,-58.5), Vector3(4.2,0.8,1.8), "parked_car", 0.8)
 	_box(Vector3(1.5,1.25,-58.5), Vector3(2.2,0.6,1.6), "parked_car", 0.8)
-	# 병원 현관 유리문: 밤이라 자동문이 꺼져 있어 손으로 밀어야 한다
-	var hdoor := StaticBody3D.new()
-	hdoor.position = Vector3(0, 1.25, HOSP_DOOR_Z)
+	# 병원 현관 유리문: 밤이라 자동문이 꺼져 있어 손으로 밀어야 한다.
+	# v0.4.4: 왼쪽 문설주에 경첩을 달아 실제로 열리고 닫힌다 (안쪽으로 밀어서 연다).
+	hosp_hinge = Node3D.new()
+	hosp_hinge.position = Vector3(-1.39, 0, HOSP_DOOR_Z)
+	add_child(hosp_hinge)
+	var hdoor := AnimatableBody3D.new()
+	hdoor.sync_to_physics = false
+	hdoor.position = Vector3(1.39, 1.25, 0)
 	hdoor.set_meta("label", "hosp_door")
 	hdoor.set_meta("overhang", false)
 	var hshape_node := CollisionShape3D.new()
@@ -411,6 +418,7 @@ func _build_world() -> void:
 	hshape.size = Vector3(2.78, 2.5, 0.08)
 	hshape_node.shape = hshape
 	hdoor.add_child(hshape_node)
+	hosp_door_shape = hshape_node
 	var hvis := MeshInstance3D.new()
 	var hbm := BoxMesh.new()
 	hbm.size = Vector3(2.78, 2.5, 0.08)
@@ -418,9 +426,17 @@ func _build_world() -> void:
 	hvis.material_override = black_material
 	hdoor.add_child(hvis)
 	reveal_visuals.append([hvis, "hosp_door"])
-	hdoor.add_child(_outline_mesh([[Vector3.ZERO, Vector3(2.78, 2.5, 0.08)], [Vector3(0.25, 0.0, 0.08), Vector3(0.04, 0.5, 0.06)]], 0.6))
-	add_child(hdoor)
-	hosp_door_nodes.append(hdoor)
+	var handle := MeshInstance3D.new()
+	var handle_mesh := BoxMesh.new()
+	handle_mesh.size = Vector3(0.04, 0.5, 0.06)
+	handle.mesh = handle_mesh
+	handle.position = Vector3(1.15, 0.0, 0.08)
+	handle.material_override = black_material
+	hdoor.add_child(handle)
+	reveal_visuals.append([handle, "door"])
+	hdoor.add_child(_outline_mesh([[Vector3.ZERO, Vector3(2.78, 2.5, 0.08)], [Vector3(1.15, 0.0, 0.08), Vector3(0.04, 0.5, 0.06)]], 0.85))
+	hosp_hinge.add_child(hdoor)
+	hosp_door_nodes.append(hosp_hinge)
 	interactables.append({"pos": Vector3(0, 0, -61.35), "r": 1.4, "kind": "hosp_door", "hint": "유리문 손잡이를 더듬어 밀기"})
 	_box(Vector3(-4.5,0.55,-68.0), Vector3(2.4,1.1,0.8), "desk", 0.5)
 	_box(Vector3(5.5,0.23,-66.0), Vector3(2.0,0.46,0.6), "bench", 0.3)
@@ -2770,33 +2786,64 @@ func _door_event_check() -> void:
 
 
 func _door_event() -> void:
+	# v0.4.4: 앞사람이 실제로 문을 열고 들어가고, 손을 놓은 문이 천천히 닫히며 나에게 부딪힌다.
+	# 검은 화면에서도 무슨 일인지 알 수 있도록 발소리·문 소리마다 짧은 울림(윤곽)을 낸다.
 	door_event_done = true
 	helping = true
 	var p := player.global_position
-	var fwd := -player.global_transform.basis.z
-	var side := player.global_transform.basis.x
-	for i in 4:
-		_play_sound(sound_step, p - fwd * (1.6 - i * 0.7) + side * 0.6, -15)
-		await _wait(0.3)
-	_notify("누군가 바쁜 걸음으로 옆을 지나간다. 끼익— 유리문이 열리는 소리.\n열린 문틈으로 따라 들어가려는 순간—", 3.0)
+	var person := _make_person()
+	# 내 왼쪽 뒤에서 나타난다 (불법 주차 차량 안에서 나오지 않게)
+	var start := Vector3(p.x - 0.65, 0, p.z + 1.6)
+	if start.x > -0.5 and start.z > -59.6:
+		start.x = -0.7
+	person.position = start
+	add_child(person)
+	# 1) 뒤에서 바쁜 걸음으로 왼쪽 옆을 지나, 내 앞을 가로질러 문 앞까지
+	var at_door := Vector3(0.25, 0, HOSP_DOOR_Z + 0.45)
+	_notify("뒤에서 바쁜 발소리가 다가온다. 누군가 옆을 지나 앞질러 간다.", 3.0)
+	await _walk_person(person, Vector3(start.x, 0, at_door.z + 1.0), 1.5)
+	await _walk_person(person, at_door, 1.5)
+	# 2) 유리문을 밀어 연다
 	_play_sound(sound_door, Vector3(0, 1.2, HOSP_DOOR_Z), -6)
-	await _wait(1.2)
+	_pulse(Vector3(0, 1.2, HOSP_DOOR_Z), 0.0, ECHO_TAP)
+	var tw_open := create_tween()
+	tw_open.tween_property(hosp_hinge, "rotation:y", deg_to_rad(80.0), 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_notify("끼익— 앞사람이 유리문을 밀어 연다. 열린 문틈으로 따라 들어가자.", 3.0)
+	for k in 3:
+		await _wait(0.23)
+		_pulse(_hosp_door_center(), 0.0, 2.4)
+	if tw_open.is_running():
+		await tw_open.finished
+	# 3) 앞사람이 들어가고, 나는 따라간다
+	_person_exit(person)
+	await _wait(0.45)
 	var target := Vector3(clampf(p.x, -0.9, 0.9), p.y, HOSP_DOOR_Z + 0.36)
-	var tw := create_tween()
-	tw.tween_property(player, "global_position", target, 0.7)
-	await tw.finished
-	# 앞사람이 내가 다 들어오기도 전에 문을 놓았다
+	var tw_me := create_tween()
+	tw_me.tween_property(player, "global_position", target, 1.2).set_trans(Tween.TRANS_SINE)
+	await _wait(0.35)
+	# 4) 손을 놓은 문이 천천히, 점점 빠르게 되돌아온다
+	var tw_close := create_tween()
+	tw_close.tween_property(hosp_hinge, "rotation:y", 0.0, 1.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	for k in 4:
+		await _wait(0.3)
+		_pulse(_hosp_door_center(), 0.0, 2.4)
+	if tw_close.is_running():          # 이미 끝난 트윈을 기다리면 영영 멈춘다
+		await tw_close.finished
+	# 5) 쾅
 	_play_sound(sound_door, Vector3(0, 1.2, HOSP_DOOR_Z), -2)
 	_play_sound(sound_thud, target + Vector3(0, 1.3, -0.3), -2)
 	count_door += 1
 	stun = 0.9
 	shake = 0.45
 	flash.color = Color(1, 1, 1, 0.5)
-	_pulse(Vector3(target.x, 1.3, HOSP_DOOR_Z), HEAD_TOUCH, 0.0)
+	_pulse(Vector3(target.x, 1.3, HOSP_DOOR_Z), HEAD_TOUCH, ECHO_TAP)
 	player.global_position = target + Vector3(0, 0, 0.35)
 	_notify("쾅— 앞사람이 내가 다 들어오기도 전에 문을 놓았다. 되돌아온 유리문에 어깨와 이마를 부딪혔다.\n문이 닫히는 것은 볼 수 없다. 손잡이를 더듬어 직접 밀고 들어가자. (%s)" % _k("interact"), 8)
 	await _wait(0.9)
 	helping = false
+	await _wait(1.5)
+	if is_instance_valid(person):
+		person.queue_free()
 
 
 func _push_hosp_door() -> void:
@@ -2805,12 +2852,83 @@ func _push_hosp_door() -> void:
 	if not door_event_done:
 		_door_event()
 		return
+	if helping:
+		return            # 문이 아직 닫히는 중
 	hosp_door_open = true
 	_play_sound(sound_door, Vector3(0, 1.2, HOSP_DOOR_Z), -6)
-	for n in hosp_door_nodes:
-		n.queue_free()
-	hosp_door_nodes.clear()
+	_pulse(Vector3(0, 1.2, HOSP_DOOR_Z), 0.0, ECHO_TAP)
+	hosp_door_shape.set_deferred("disabled", true)
+	var tw := create_tween()
+	tw.tween_property(hosp_hinge, "rotation:y", deg_to_rad(80.0), 0.9).set_trans(Tween.TRANS_SINE)
 	_notify("손잡이를 찾아 유리문을 밀었다. 한 손으로 문을 붙잡은 채, 몸이 다 들어갈 때까지 천천히 지나간다.", 6)
+
+
+# 움직이는 유리문 가운데의 월드 좌표 (울림을 문 위치에 낸다)
+func _hosp_door_center() -> Vector3:
+	return hosp_hinge.global_transform * Vector3(1.39, 1.25, 0)
+
+
+# 문을 지나 오른쪽 안쪽으로 비켜 걷는다 (닫히는 문이 사람을 통과해 보이지 않게, 문이 쓸고 지나가는 범위 밖으로)
+func _person_exit(person: Node3D) -> void:
+	await _walk_person(person, Vector3(0.35, 0, HOSP_DOOR_Z - 1.1), 1.6)
+	await _walk_person(person, Vector3(2.0, 0, HOSP_DOOR_Z - 1.9), 1.6)
+	await _walk_person(person, Vector3(2.8, 0, HOSP_DOOR_Z - 4.2), 1.4)
+
+
+# 지나가는 사람: 다리·몸·팔·머리를 상자로 만든 단순한 사람 형상 (충돌 없음)
+func _make_person() -> Node3D:
+	var root := Node3D.new()
+	var parts := [
+		[Vector3(-0.1, 0.42, 0), Vector3(0.15, 0.84, 0.18), "person_leg"],
+		[Vector3(0.1, 0.42, 0), Vector3(0.15, 0.84, 0.18), "person_leg"],
+		[Vector3(0, 1.14, 0), Vector3(0.44, 0.62, 0.26), "person_top"],
+		[Vector3(-0.29, 1.1, 0), Vector3(0.11, 0.58, 0.13), "person_top"],
+		[Vector3(0.29, 1.1, 0), Vector3(0.11, 0.58, 0.13), "person_top"],
+		[Vector3(0, 1.6, 0), Vector3(0.22, 0.26, 0.24), "person_head"],
+	]
+	var boxes := []
+	for part in parts:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = part[1]
+		mi.mesh = bm
+		mi.position = part[0]
+		mi.material_override = _reveal_mat(part[2]) if reveal_on else black_material
+		mi.set_meta("leg", part[2] == "person_leg")
+		root.add_child(mi)
+		reveal_visuals.append([mi, part[2]])
+		boxes.append([part[0], part[1]])
+	root.add_child(_outline_mesh(boxes, 0.7))
+	return root
+
+
+# 사람 형상을 걸어서 옮긴다: 발소리마다 짧은 울림, 다리를 번갈아 흔든다
+func _walk_person(person: Node3D, to: Vector3, speed: float) -> void:
+	var from := person.position
+	var flat := Vector3(to.x - from.x, 0, to.z - from.z)
+	if flat.length() < 0.01:
+		return
+	person.rotation.y = atan2(-flat.x, -flat.z)
+	var dur := flat.length() / speed
+	var t := 0.0
+	var step_t := 0.0
+	var leg_sign := 1.0
+	while t < dur and is_instance_valid(person):
+		var dt := get_physics_process_delta_time()
+		t = minf(t + dt, dur)
+		step_t += dt
+		person.position = from.lerp(to, t / dur)
+		person.position.y = absf(sin(t * speed * PI / 0.7)) * 0.03
+		var swing := sin(t * speed * PI / 0.7) * 0.35
+		for c in person.get_children():
+			if c is MeshInstance3D and c.get_meta("leg", false):
+				c.rotation.x = swing * (1.0 if c.position.x < 0 else -1.0)
+		if step_t >= 0.36:
+			step_t = 0.0
+			leg_sign = -leg_sign
+			_play_sound(sound_step, person.position, -12)
+			_pulse(person.position + Vector3(0, 0.9, 0), 0.0, 1.5)
+		await get_tree().physics_frame
 
 
 # 편의점 출입문 차임: 지나가는 손님이 문을 열 때마다 '딩동'. 길을 기억하는 소리 단서가 된다.
@@ -2842,6 +2960,7 @@ func _reveal_mat(label: String) -> StandardMaterial3D:
 		"side_car": Color(0.22, 0.32, 0.72), "car0": Color(0.75, 0.12, 0.12), "car1": Color(0.85, 0.85, 0.88),
 		"car2": Color(0.15, 0.15, 0.17), "car3": Color(0.25, 0.45, 0.7), "asphalt": Color(0.2, 0.2, 0.22),
 		"paint": Color(0.95, 0.95, 0.95), "paving": Color(0.98, 0.8, 0.1),
+		"person_top": Color(0.78, 0.32, 0.22), "person_leg": Color(0.2, 0.22, 0.3), "person_head": Color(0.85, 0.68, 0.55),
 	}
 	var m := StandardMaterial3D.new()
 	m.albedo_color = colors.get(label, Color(0.4, 0.4, 0.42))
@@ -2900,9 +3019,10 @@ func _set_reveal(on: bool) -> void:
 	world_env.background_color = Color(0.05, 0.07, 0.13) if on else Color.BLACK
 	var alive: Array = []
 	for entry in reveal_visuals:
-		var mi: MeshInstance3D = entry[0]
-		if not is_instance_valid(mi):
+		# 지나간 차처럼 이미 사라진 물체는 건너뛴다 (타입 변수에 넣기 전에 확인해야 오류가 나지 않는다)
+		if not is_instance_valid(entry[0]):
 			continue
+		var mi: MeshInstance3D = entry[0]
 		alive.append(entry)
 		mi.material_override = _reveal_mat(str(entry[1])) if on else black_material
 	reveal_visuals = alive

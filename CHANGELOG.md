@@ -2,6 +2,15 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르고, 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.4.4] - 2026-11-26
+
+### 변경
+- **문을 놓아 버리는 사람 연출**: 병원 현관 유리문에 경첩을 달아 실제로 열리고 닫히게 함. 사람 형상이 뒤에서 옆을 지나 문을 밀어 열고 들어가며, 손을 놓은 문이 천천히(점점 빠르게) 되돌아와 따라 들어가던 나에게 부딪힘. 검은 화면에서도 무슨 일인지 알 수 있도록 그 사람의 발소리와 문이 움직이는 소리마다 짧은 울림(윤곽)이 남. 다시보기 화면에서는 사람과 문이 그대로 보임
+- 손잡이를 밀어 들어갈 때 유리문이 실제로 안쪽으로 열림 (이전에는 문이 사라졌음)
+
+### 수정
+- 다시보기에서 지나간 차가 사라진 뒤 V로 화면을 켜거나 끄면 처리가 중간에 멈춰 일부 물체의 색이 바뀌지 않고 안내 문구가 나오지 않던 문제
+
 ## [0.4.3] - 2026-11-24
 
 시각장애 당사자 11명(전맹 9, 저시력 1, 기타 1) 설문·인터뷰 결과를 시각장애 보행에 반영했습니다.
@@ -146,6 +155,7 @@
 ### 변경
 - 프로젝트 이름을 임시 이름 `Echo Road(잔향)`에서 `민들레(Dandelion)`로 변경
 
+[0.4.4]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.4
 [0.4.3]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.3
 [0.4.2]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.2
 [0.4.1]: https://github.com/norussi/-_project_dandelion/releases/tag/v0.4.1

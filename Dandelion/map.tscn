@@ -1080,71 +1080,21 @@ script = ExtResource("10_6sq2s")
 kind = 0
 light_energy = 0.25
 
-[node name="CorridorSign_01" type="Node3D" parent="Floor1/ExitSigns" unique_id=2126990693]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_02" type="Node3D" parent="Floor1/ExitSigns" unique_id=669602416]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_03" type="Node3D" parent="Floor1/ExitSigns" unique_id=1420788958]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_04" type="Node3D" parent="Floor1/ExitSigns" unique_id=995297425]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
-[node name="CorridorSign_05" type="Node3D" parent="Floor1/ExitSigns" unique_id=1223619436]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_06" type="Node3D" parent="Floor1/ExitSigns" unique_id=897280625]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_07" type="Node3D" parent="Floor1/ExitSigns" unique_id=812503297]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_08" type="Node3D" parent="Floor1/ExitSigns" unique_id=1333534935]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_09" type="Node3D" parent="Floor1/ExitSigns" unique_id=1594597416]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_10" type="Node3D" parent="Floor1/ExitSigns" unique_id=1426245364]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -11.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_11" type="Node3D" parent="Floor1/ExitSigns" unique_id=766065644]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -5.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_12" type="Node3D" parent="Floor1/ExitSigns" unique_id=1722707608]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_13" type="Node3D" parent="Floor1/ExitSigns" unique_id=2115355762]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_14" type="Node3D" parent="Floor1/ExitSigns" unique_id=212047673]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 15.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_15" type="Node3D" parent="Floor1/ExitSigns" unique_id=1797243574]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 22.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
 
 [node name="ExitSign_Outside" type="Node3D" parent="Floor1/ExitSigns" unique_id=1156471547]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, -19.88, 0.6, 9.6)
@@ -2245,71 +2195,21 @@ script = ExtResource("10_6sq2s")
 kind = 0
 light_energy = 0.25
 
-[node name="CorridorSign_01" type="Node3D" parent="Floor2/ExitSigns" unique_id=950037896]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_02" type="Node3D" parent="Floor2/ExitSigns" unique_id=1008867014]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_03" type="Node3D" parent="Floor2/ExitSigns" unique_id=1063798059]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_04" type="Node3D" parent="Floor2/ExitSigns" unique_id=1577825293]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
-[node name="CorridorSign_05" type="Node3D" parent="Floor2/ExitSigns" unique_id=1517531390]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_06" type="Node3D" parent="Floor2/ExitSigns" unique_id=1371360888]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_07" type="Node3D" parent="Floor2/ExitSigns" unique_id=1521758832]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_08" type="Node3D" parent="Floor2/ExitSigns" unique_id=273144264]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_09" type="Node3D" parent="Floor2/ExitSigns" unique_id=2111480037]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_10" type="Node3D" parent="Floor2/ExitSigns" unique_id=785249167]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -11.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_11" type="Node3D" parent="Floor2/ExitSigns" unique_id=1321602930]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -5.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_12" type="Node3D" parent="Floor2/ExitSigns" unique_id=92672081]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_13" type="Node3D" parent="Floor2/ExitSigns" unique_id=560665019]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_14" type="Node3D" parent="Floor2/ExitSigns" unique_id=568213627]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 15.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_15" type="Node3D" parent="Floor2/ExitSigns" unique_id=1591897036]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 22.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
 
 [node name="AlarmButtons" type="Node3D" parent="Floor2" unique_id=161941790]
 
@@ -3404,71 +3304,21 @@ script = ExtResource("10_6sq2s")
 kind = 0
 light_energy = 0.25
 
-[node name="CorridorSign_01" type="Node3D" parent="Floor3/ExitSigns" unique_id=1474735822]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_02" type="Node3D" parent="Floor3/ExitSigns" unique_id=1109651595]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_03" type="Node3D" parent="Floor3/ExitSigns" unique_id=29231048]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_04" type="Node3D" parent="Floor3/ExitSigns" unique_id=77854961]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
-[node name="CorridorSign_05" type="Node3D" parent="Floor3/ExitSigns" unique_id=1868613955]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_06" type="Node3D" parent="Floor3/ExitSigns" unique_id=1914310356]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_07" type="Node3D" parent="Floor3/ExitSigns" unique_id=554367994]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_08" type="Node3D" parent="Floor3/ExitSigns" unique_id=1641777350]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_09" type="Node3D" parent="Floor3/ExitSigns" unique_id=1163812896]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_10" type="Node3D" parent="Floor3/ExitSigns" unique_id=641005253]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -11.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_11" type="Node3D" parent="Floor3/ExitSigns" unique_id=2052855846]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -5.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_12" type="Node3D" parent="Floor3/ExitSigns" unique_id=712497188]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_13" type="Node3D" parent="Floor3/ExitSigns" unique_id=237529081]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_14" type="Node3D" parent="Floor3/ExitSigns" unique_id=1802998773]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 15.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_15" type="Node3D" parent="Floor3/ExitSigns" unique_id=2027235139]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 22.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
 
 [node name="AlarmButtons" type="Node3D" parent="Floor3" unique_id=160408763]
 
@@ -4543,71 +4393,21 @@ script = ExtResource("10_6sq2s")
 kind = 0
 light_energy = 0.25
 
-[node name="CorridorSign_01" type="Node3D" parent="Floor4/ExitSigns" unique_id=1564256548]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_02" type="Node3D" parent="Floor4/ExitSigns" unique_id=82094925]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_03" type="Node3D" parent="Floor4/ExitSigns" unique_id=1253467001]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_04" type="Node3D" parent="Floor4/ExitSigns" unique_id=1873367587]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
-[node name="CorridorSign_05" type="Node3D" parent="Floor4/ExitSigns" unique_id=1250757714]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_06" type="Node3D" parent="Floor4/ExitSigns" unique_id=1412599637]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
 [node name="CorridorSign_07" type="Node3D" parent="Floor4/ExitSigns" unique_id=1553595243]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 0.45, 8.14)
-script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_08" type="Node3D" parent="Floor4/ExitSigns" unique_id=85510862]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.5, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
 
 [node name="CorridorSign_09" type="Node3D" parent="Floor4/ExitSigns" unique_id=823224223]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 0.45, 8.14)
 script = ExtResource("10_6sq2s")
-
-[node name="CorridorSign_10" type="Node3D" parent="Floor4/ExitSigns" unique_id=959701430]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -11.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_11" type="Node3D" parent="Floor4/ExitSigns" unique_id=166642599]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -5.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_12" type="Node3D" parent="Floor4/ExitSigns" unique_id=1311222286]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_13" type="Node3D" parent="Floor4/ExitSigns" unique_id=1132394629]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_14" type="Node3D" parent="Floor4/ExitSigns" unique_id=787352909]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 15.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
-
-[node name="CorridorSign_15" type="Node3D" parent="Floor4/ExitSigns" unique_id=1619475780]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 22.5, 0.45, 10.86)
-script = ExtResource("10_6sq2s")
-arrow = 2
 
 [node name="AlarmButtons" type="Node3D" parent="Floor4" unique_id=1369103011]
 
